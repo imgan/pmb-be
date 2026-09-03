@@ -9,6 +9,8 @@ const JENIS_SURAT_VALUES = [
   'UJIAN_UAS',
 ];
 
+const STATUS_VALUES = ['DIAJUKAN', 'DISETUJUI', 'DITOLAK'];
+
 const commonFields = {
   nomorSurat: Joi.string().max(100).allow('', null),
   semester: Joi.number().integer().min(1).max(20).allow(null),
@@ -34,7 +36,8 @@ const updateSurat = Joi.object({
   mahasiswaId: Joi.number().integer(),
   jenisSurat: Joi.string().valid(...JENIS_SURAT_VALUES),
   tanggalInput: Joi.date(),
+  status: Joi.string().valid(...STATUS_VALUES),
   ...commonFields,
 }).min(1);
 
-module.exports = { createSurat, updateSurat, JENIS_SURAT_VALUES };
+module.exports = { createSurat, updateSurat, JENIS_SURAT_VALUES, STATUS_VALUES };

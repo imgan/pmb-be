@@ -16,6 +16,7 @@ const SORTABLE_COLUMNS = {
 const listSurat = async (query) => {
   const { page, limit, offset } = getPagination(query);
   const where = {};
+  if (query.status) where.status = query.status;
   const mahasiswaWhere = {};
   if (query.search) {
     mahasiswaWhere[Op.or] = [

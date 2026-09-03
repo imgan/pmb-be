@@ -17,6 +17,11 @@ module.exports = (sequelize, DataTypes) => {
       noHpKoordinator: { type: DataTypes.STRING(30), allowNull: true },
       tanggalUjianMulai: { type: DataTypes.DATEONLY, allowNull: true },
       tanggalUjianSelesai: { type: DataTypes.DATEONLY, allowNull: true },
+      status: {
+        type: DataTypes.ENUM('DIAJUKAN', 'DISETUJUI', 'DITOLAK'),
+        allowNull: false,
+        defaultValue: 'DISETUJUI',
+      },
       createdBy: { type: DataTypes.INTEGER, allowNull: true },
       updatedBy: { type: DataTypes.INTEGER, allowNull: true },
     },

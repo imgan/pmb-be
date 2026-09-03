@@ -22,6 +22,10 @@ const createKurikulum = Joi.object({
   kompIlmuKomputer: Joi.string().max(100).allow(null, ''),
   mataKuliahMinat: Joi.string().max(100).allow(null, ''),
   muatanMataKuliah: Joi.string().max(255).allow(null, ''),
+  metodePembelajaran: Joi.string().max(100).allow(null, ''),
+  tanggalMulaiEfektif: Joi.date().iso().allow(null),
+  tanggalAkhirEfektif: Joi.date().iso().allow(null),
+  idMatkul: Joi.string().max(30).allow(null, ''),
   semester: Joi.number().integer().min(1).max(14).allow(null),
 });
 
@@ -42,7 +46,15 @@ const updateKurikulum = Joi.object({
   kompIlmuKomputer: Joi.string().max(100).allow(null, ''),
   mataKuliahMinat: Joi.string().max(100).allow(null, ''),
   muatanMataKuliah: Joi.string().max(255).allow(null, ''),
+  metodePembelajaran: Joi.string().max(100).allow(null, ''),
+  tanggalMulaiEfektif: Joi.date().iso().allow(null),
+  tanggalAkhirEfektif: Joi.date().iso().allow(null),
+  idMatkul: Joi.string().max(30).allow(null, ''),
   semester: Joi.number().integer().min(1).max(14).allow(null),
 }).min(1);
 
-module.exports = { createKurikulum, updateKurikulum };
+const importKurikulum = Joi.object({
+  file: Joi.string().required(),
+});
+
+module.exports = { createKurikulum, updateKurikulum, importKurikulum };

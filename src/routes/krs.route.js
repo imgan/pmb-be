@@ -44,6 +44,28 @@ router.post('/', authorize(MENU.KRS_MANAGEMENT, ACTION.CREATE), validate(createK
 
 /**
  * @swagger
+ * /krs/kuota:
+ *   get:
+ *     summary: Get kuota maksimal SKS untuk mahasiswa & semester tertentu, berdasarkan IP semester sebelumnya
+ *     tags: [Krs]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: mahasiswaId
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: semester
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Kuota SKS (null maxSks berarti belum ada riwayat nilai / tidak dibatasi)
+ */
+router.get('/kuota', authorize(MENU.KRS_MANAGEMENT, ACTION.READ), krsController.kuota);
+
+/**
+ * @swagger
  * /krs/{id}:
  *   get:
  *     summary: Get KRS detail (termasuk daftar kelas kuliah & total SKS)

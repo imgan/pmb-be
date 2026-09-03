@@ -12,6 +12,10 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 'HADIR',
       },
       keterangan: { type: DataTypes.TEXT, allowNull: true },
+      // Diisi oleh dosen sendiri saat menginput realisasi mengajar lewat portal Dosen.
+      jamMasuk: { type: DataTypes.TIME, allowNull: true },
+      jamKeluar: { type: DataTypes.TIME, allowNull: true },
+      pertemuanKe: { type: DataTypes.INTEGER, allowNull: true },
       isDelete: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       createdBy: { type: DataTypes.INTEGER, allowNull: true },
       updatedBy: { type: DataTypes.INTEGER, allowNull: true },
@@ -28,6 +32,7 @@ module.exports = (sequelize, DataTypes) => {
   KehadiranDosen.associate = (models) => {
     KehadiranDosen.belongsTo(models.JadwalKuliah, { foreignKey: 'jadwalKuliahId', as: 'jadwalKuliah' });
     KehadiranDosen.belongsTo(models.Dosen, { foreignKey: 'dosenId', as: 'dosen' });
+    KehadiranDosen.hasMany(models.KehadiranMahasiswa, { foreignKey: 'kehadiranDosenId', as: 'presensiMahasiswa' });
     KehadiranDosen.belongsTo(models.User, { foreignKey: 'createdBy', as: 'creator' });
     KehadiranDosen.belongsTo(models.User, { foreignKey: 'updatedBy', as: 'updater' });
   };

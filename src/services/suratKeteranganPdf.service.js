@@ -74,11 +74,18 @@ const kv = (doc, label, value, { labelWidth = 150 } = {}) => {
 
 const signatureBlock = (doc, { date, jabatan, name }) => {
   doc.moveDown(2);
-  doc.text(`${CITY_NAME}, ${date}`, { align: 'right' });
-  doc.text(jabatan, { align: 'right' });
+  // Blok tanda tangan dulunya align:'right' penuh selebar halaman — itu membuat baris
+  // "Rektor" (lebih pendek dari baris tanggal) menempel di margin kanan alih-alih rata
+  // tengah tepat di bawah tanggal. Sekarang tiap baris di-center dalam kolom sempit yang
+  // sama di sisi kanan halaman, supaya tanggal/jabatan/nama sejajar tengah satu sama lain.
+  const boxWidth = 220;
+  const boxX = doc.page.width - doc.page.margins.right - boxWidth;
+  doc.text(`${CITY_NAME}, ${date}`, boxX, doc.y, { width: boxWidth, align: 'center' });
+  doc.text(jabatan, boxX, doc.y, { width: boxWidth, align: 'center' });
   doc.moveDown(3);
-  doc.font('Times-Bold').text(name, { align: 'right', underline: true });
+  doc.font('Times-Bold').text(name, boxX, doc.y, { width: boxWidth, align: 'center', underline: true });
   doc.font('Times-Roman');
+  doc.x = doc.page.margins.left;
 };
 
 // ---- SURAT KETERANGAN (Aktif Kuliah / Lulus Menunggu Ijazah / Ujian UAS) ----
@@ -90,7 +97,9 @@ const buildSuratKeteranganPdf = (data) => {
   doc.moveDown(0.15);
   const nomorText =
     surat.jenisSurat === 'UJIAN_UAS' ? surat.nomorSurat ?? '' : nomorSuratLabel(surat.nomorSurat, surat.tanggalInput);
-  doc.font('Times-Roman').fontSize(10).text(`Nomor : ${nomorText}`, { align: 'center' });
+  // Spasi ekstra setelah "Nomor :" — saat nomorSurat belum diisi (nomorText hanya berupa
+  // suffix "/AK/BAAK-UBS/..."), memberi ruang kosong agar nomor bisa ditulis tangan.
+  doc.font('Times-Roman').fontSize(10).text(`Nomor :     ${nomorText}`, { align: 'center' });
   doc.fontSize(11);
   doc.moveDown(1);
 

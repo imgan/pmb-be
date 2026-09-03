@@ -6,6 +6,8 @@ module.exports = (sequelize, DataTypes) => {
       kodeMk: { type: DataTypes.STRING(30), allowNull: false, unique: true },
       namaMk: { type: DataTypes.STRING(150), allowNull: false },
       sks: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      // Deskripsi silabus, ditampilkan read-only di halaman "Silabus Matakuliah" portal Dosen.
+      silabus: { type: DataTypes.TEXT, allowNull: true },
       isDelete: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       createdBy: { type: DataTypes.INTEGER, allowNull: true },
       updatedBy: { type: DataTypes.INTEGER, allowNull: true },

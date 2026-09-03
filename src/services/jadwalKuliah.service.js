@@ -60,6 +60,12 @@ const listJadwalKuliah = async (query) => {
   if (query.tahunAjaranId) {
     where.tahunAjaranId = query.tahunAjaranId;
   }
+  if (query.semester) {
+    // Banyak jadwal kuliah lama belum ditandai semester-nya (kolom nullable, sering kosong
+    // di data existing) — kalau di-strict-match, mahasiswa/BAAK jadi tidak bisa memilih kelas
+    // yang sebenarnya valid hanya karena belum ditag. Jadi ikutkan juga yang belum ditag.
+    where.semester = { [Op.or]: [{ [Op.eq]: query.semester }, { [Op.is]: null }] };
+  }
 
   const { rows, count } = await JadwalKuliah.findAndCountAll({
     where,

@@ -1,5 +1,6 @@
 const catchAsync = require('../utils/catchAsync');
 const sendResponse = require('../utils/ApiResponse');
+const { sendWorkbook } = require('../utils/excel');
 const jurusanService = require('../services/jurusan.service');
 
 const list = catchAsync(async (req, res) => {
@@ -27,4 +28,19 @@ const remove = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'Jurusan deleted' });
 });
 
-module.exports = { list, detail, create, update, remove };
+const exportExcel = catchAsync(async (req, res) => {
+  const workbook = await jurusanService.exportJurusan();
+  await sendWorkbook(res, workbook, 'jurusan.xlsx');
+});
+
+const importExcel = catchAsync(async (req, res) => {
+  const result = await jurusanService.importJurusan(req.body.file, req.user.id);
+  sendResponse(res, 200, { message: 'Import jurusan selesai', data: result });
+});
+
+const importTemplate = catchAsync(async (req, res) => {
+  const workbook = jurusanService.exportJurusanTemplate();
+  await sendWorkbook(res, workbook, 'template-import-jurusan.xlsx');
+});
+
+module.exports = { list, detail, create, update, remove, exportExcel, importExcel, importTemplate };

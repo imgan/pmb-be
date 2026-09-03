@@ -11,7 +11,11 @@ module.exports = (sequelize, DataTypes) => {
       orderNumber: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       isPublic: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
-      module: { type: DataTypes.ENUM('pmb', 'baak', 'sdi', 'prodi'), allowNull: false, defaultValue: 'pmb' },
+      module: {
+        type: DataTypes.ENUM('pmb', 'baak', 'sdi', 'prodi', 'keuangan', 'sim'),
+        allowNull: false,
+        defaultValue: 'pmb',
+      },
       createdBy: { type: DataTypes.INTEGER, allowNull: true },
       updatedBy: { type: DataTypes.INTEGER, allowNull: true },
     },

@@ -28,6 +28,18 @@ const options = {
           bearerFormat: 'JWT',
           description: 'Access token dari POST /peserta/login (berbeda dari token staff/admin)',
         },
+        dosenBearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Access token dari POST /dosen-portal/login (berbeda dari token staff/admin)',
+        },
+        mahasiswaBearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Access token dari POST /mahasiswa-portal/login (berbeda dari token staff/admin)',
+        },
       },
       parameters: {
         PageParam: {

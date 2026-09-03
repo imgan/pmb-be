@@ -12,6 +12,9 @@ const updateMahasiswa = Joi.object({
   tahunMasuk: Joi.number().integer().min(2000).max(2100),
   tahunAjaranId: Joi.number().integer().allow(null),
   statusMasuk: Joi.string().valid('BARU', 'TRANSFER_LUAR', 'TRANSFER_DALAM', 'TRANSFER_LUAR_KARYAWAN', 'TRANSFER_DALAM_KARYAWAN'),
+  semesterDiakui: Joi.number().integer().min(1).allow(null),
+  jumlahSemesterCuti: Joi.number().integer().min(0),
+  semesterOverride: Joi.number().integer().min(1).allow(null),
   isActive: Joi.boolean(),
   statusKeluar: Joi.string()
     .valid('CUTI', 'MENGUNDURKAN_DIRI', 'DROP_OUT', 'HABIS_MASA_STUDI', 'MUTASI', 'PUTUS_SEKOLAH', 'WAFAT', 'HILANG', 'LAINNYA')

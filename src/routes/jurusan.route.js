@@ -3,7 +3,7 @@ const jurusanController = require('../controllers/jurusan.controller');
 const authenticate = require('../middlewares/auth.middleware');
 const authorize = require('../middlewares/permission.middleware');
 const validate = require('../middlewares/validate.middleware');
-const { createJurusan, updateJurusan } = require('../validations/jurusan.validation');
+const { createJurusan, updateJurusan, importJurusan } = require('../validations/jurusan.validation');
 const MENU = require('../constants/menuCodes');
 const ACTION = require('../constants/actions');
 
@@ -52,6 +52,56 @@ router.post(
   validate(createJurusan),
   jurusanController.create
 );
+
+/**
+ * @swagger
+ * /jurusan/export:
+ *   get:
+ *     summary: Export seluruh data jurusan ke file Excel (.xlsx)
+ *     tags: [Jurusan]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: File Excel jurusan
+ */
+router.get('/export', authorize(MENU.JURUSAN_MANAGEMENT, ACTION.READ), jurusanController.exportExcel);
+
+/**
+ * @swagger
+ * /jurusan/import-template:
+ *   get:
+ *     summary: Download template Excel kosong (1 baris contoh) untuk import jurusan
+ *     tags: [Jurusan]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: File template Excel
+ */
+router.get('/import-template', authorize(MENU.JURUSAN_MANAGEMENT, ACTION.READ), jurusanController.importTemplate);
+
+/**
+ * @swagger
+ * /jurusan/import:
+ *   post:
+ *     summary: Import data jurusan dari file Excel (.xlsx, base64). Membuat baru atau mengubah yang sudah ada (dicocokkan lewat Nama Jurusan). Baris valid disimpan, baris tidak valid dilewati dan dilaporkan.
+ *     tags: [Jurusan]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 description: Base64 data URI file .xlsx
+ *     responses:
+ *       200:
+ *         description: Ringkasan hasil import
+ */
+router.post('/import', authorize(MENU.JURUSAN_MANAGEMENT, ACTION.CREATE), validate(importJurusan), jurusanController.importExcel);
 
 /**
  * @swagger

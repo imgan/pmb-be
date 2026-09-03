@@ -1,5 +1,6 @@
 const catchAsync = require('../utils/catchAsync');
 const sendResponse = require('../utils/ApiResponse');
+const { sendWorkbook } = require('../utils/excel');
 const kurikulumService = require('../services/kurikulum.service');
 
 const list = catchAsync(async (req, res) => {
@@ -32,4 +33,19 @@ const remove = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'Kurikulum deleted' });
 });
 
-module.exports = { list, listAktif, detail, create, update, remove };
+const exportExcel = catchAsync(async (req, res) => {
+  const workbook = await kurikulumService.exportKurikulum();
+  await sendWorkbook(res, workbook, 'kurikulum.xlsx');
+});
+
+const importExcel = catchAsync(async (req, res) => {
+  const result = await kurikulumService.importKurikulum(req.body.file, req.user.id);
+  sendResponse(res, 200, { message: 'Import kurikulum selesai', data: result });
+});
+
+const importTemplate = catchAsync(async (req, res) => {
+  const workbook = kurikulumService.exportKurikulumTemplate();
+  await sendWorkbook(res, workbook, 'template-import-kurikulum.xlsx');
+});
+
+module.exports = { list, listAktif, detail, create, update, remove, exportExcel, importExcel, importTemplate };

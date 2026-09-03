@@ -31,6 +31,10 @@ module.exports = (sequelize, DataTypes) => {
       kompIlmuKomputer: { type: DataTypes.STRING(100), allowNull: true },
       mataKuliahMinat: { type: DataTypes.STRING(100), allowNull: true },
       muatanMataKuliah: { type: DataTypes.STRING(255), allowNull: true },
+      metodePembelajaran: { type: DataTypes.STRING(100), allowNull: true },
+      tanggalMulaiEfektif: { type: DataTypes.DATEONLY, allowNull: true },
+      tanggalAkhirEfektif: { type: DataTypes.DATEONLY, allowNull: true },
+      idMatkul: { type: DataTypes.STRING(30), allowNull: true },
       semester: { type: DataTypes.INTEGER, allowNull: true },
       sksTotal: {
         type: DataTypes.VIRTUAL,

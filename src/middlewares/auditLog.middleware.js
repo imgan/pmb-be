@@ -31,6 +31,7 @@ const MODULE_LABELS = [
   [/^\/api\/biaya-kuliah/, 'Biaya Kuliah'],
   [/^\/api\/calon-mahasiswa/, 'Calon Mahasiswa'],
   [/^\/api\/home-images/, 'Gambar Beranda'],
+  [/^\/api\/keuangan\//, 'Keuangan'],
 ];
 
 // Generic "resource by numeric id" routes — used to snapshot the row before it's changed.

@@ -27,6 +27,9 @@ module.exports = (sequelize, DataTypes) => {
       },
       isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       isDelete: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      // Password untuk login mandiri di portal Dosen (terpisah dari sistem User/Role admin).
+      // Nullable karena dosen lama belum tentu punya akun portal.
+      password: { type: DataTypes.STRING(255), allowNull: true },
       createdBy: { type: DataTypes.INTEGER, allowNull: true },
       updatedBy: { type: DataTypes.INTEGER, allowNull: true },
     },
@@ -34,13 +37,14 @@ module.exports = (sequelize, DataTypes) => {
       tableName: 'dosen',
       underscored: true,
       timestamps: true,
-      defaultScope: { where: { isDelete: false } },
-      scopes: { withDeleted: {} },
+      defaultScope: { where: { isDelete: false }, attributes: { exclude: ['password'] } },
+      scopes: { withDeleted: {}, withPassword: { attributes: { include: ['password'] } } },
     }
   );
 
   Dosen.associate = (models) => {
     Dosen.hasOne(models.VocUjianFtid, { foreignKey: 'dosenId', as: 'vocUjianFtid' });
+    Dosen.hasMany(models.HonorUjianPembayaran, { foreignKey: 'dosenId', as: 'honorUjianPembayaranList' });
     Dosen.belongsTo(models.User, { foreignKey: 'createdBy', as: 'creator' });
     Dosen.belongsTo(models.User, { foreignKey: 'updatedBy', as: 'updater' });
   };

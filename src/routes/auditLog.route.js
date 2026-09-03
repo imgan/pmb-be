@@ -46,7 +46,7 @@ router.use(authenticate);
  */
 router.get(
   '/',
-  authorize([MENU.AUDIT_LOG_MANAGEMENT, MENU.BAAK_AUDIT_LOG_MANAGEMENT], ACTION.READ),
+  authorize([MENU.AUDIT_LOG_MANAGEMENT, MENU.BAAK_AUDIT_LOG_MANAGEMENT, MENU.KEUANGAN_AUDIT_LOG_MANAGEMENT], ACTION.READ),
   auditLogController.list
 );
 
@@ -63,7 +63,7 @@ router.get(
  */
 router.get(
   '/modules',
-  authorize([MENU.AUDIT_LOG_MANAGEMENT, MENU.BAAK_AUDIT_LOG_MANAGEMENT], ACTION.READ),
+  authorize([MENU.AUDIT_LOG_MANAGEMENT, MENU.BAAK_AUDIT_LOG_MANAGEMENT, MENU.KEUANGAN_AUDIT_LOG_MANAGEMENT], ACTION.READ),
   auditLogController.modules
 );
 

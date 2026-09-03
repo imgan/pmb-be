@@ -24,4 +24,8 @@ const updateJurusan = Joi.object({
   namaFakultas: Joi.string().max(150).allow('', null),
 }).min(1);
 
-module.exports = { createJurusan, updateJurusan };
+const importJurusan = Joi.object({
+  file: Joi.string().required(),
+});
+
+module.exports = { createJurusan, updateJurusan, importJurusan };

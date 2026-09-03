@@ -12,6 +12,11 @@ const detail = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'KRS fetched', data });
 });
 
+const kuota = catchAsync(async (req, res) => {
+  const data = await krsService.getKuotaSks(req.query.mahasiswaId, req.query.semester);
+  sendResponse(res, 200, { message: 'Kuota SKS fetched', data });
+});
+
 const create = catchAsync(async (req, res) => {
   const data = await krsService.createKrs(req.body, req.user.id);
   sendResponse(res, 201, { message: 'KRS created', data });
@@ -27,4 +32,4 @@ const remove = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'KRS deleted' });
 });
 
-module.exports = { list, detail, create, update, remove };
+module.exports = { list, detail, kuota, create, update, remove };

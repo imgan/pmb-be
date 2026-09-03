@@ -6,6 +6,7 @@ module.exports = (sequelize, DataTypes) => {
       nama: { type: DataTypes.STRING(20), allowNull: false, unique: true },
       tahunMulai: { type: DataTypes.INTEGER, allowNull: false },
       tahunSelesai: { type: DataTypes.INTEGER, allowNull: false },
+      jenisSemester: { type: DataTypes.ENUM('GANJIL', 'GENAP'), allowNull: false, defaultValue: 'GANJIL' },
       isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       isDelete: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       createdBy: { type: DataTypes.INTEGER, allowNull: true },

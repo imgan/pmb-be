@@ -21,6 +21,17 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 'BARU',
       },
+      // Hanya relevan untuk mahasiswa transfer (statusMasuk TRANSFER_*): semester awal saat
+      // transfer diterima, hasil SK penyetaraan/konversi SKS dari kampus/prodi asal — input
+      // manual akademik/prodi, dipakai sebagai titik awal hitung semester berjalan, bukan hasil
+      // rumus (lihat pmb-be/src/utils/hitungSemester.js).
+      semesterDiakui: { type: DataTypes.INTEGER, allowNull: true },
+      // Tidak ada riwayat cuti per semester di sistem ini, jadi jumlahnya input manual
+      // akademik/prodi untuk dikurangkan dari hitungan semester berjalan.
+      jumlahSemesterCuti: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      // Koreksi manual untuk kasus khusus per mahasiswa — kalau diisi, MENGGANTIKAN hasil
+      // hitungan otomatis (hitungSemesterBerjalan), bukan ikut dihitung. Null = tetap otomatis.
+      semesterOverride: { type: DataTypes.INTEGER, allowNull: true },
       isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       statusKeluar: {
         type: DataTypes.ENUM(
@@ -38,6 +49,10 @@ module.exports = (sequelize, DataTypes) => {
       },
       tanggalKeluar: { type: DataTypes.DATEONLY, allowNull: true },
       alasanKeluar: { type: DataTypes.TEXT, allowNull: true },
+      password: { type: DataTypes.STRING(255), allowNull: true },
+      // `photo` (base64) dikecualikan dari defaultScope mengikuti pola user.model.js — dipakai
+      // di banyak query lain (mis. list mahasiswa admin) yang tidak perlu blob base64 ikut terbawa.
+      photo: { type: DataTypes.TEXT('long'), allowNull: true },
       createdBy: { type: DataTypes.INTEGER, allowNull: true },
       updatedBy: { type: DataTypes.INTEGER, allowNull: true },
     },
@@ -45,6 +60,11 @@ module.exports = (sequelize, DataTypes) => {
       tableName: 'mahasiswa',
       underscored: true,
       timestamps: true,
+      defaultScope: { attributes: { exclude: ['password', 'photo'] } },
+      scopes: {
+        withPassword: { attributes: { include: ['password'] } },
+        withPhoto: { attributes: { include: ['photo'] } },
+      },
     }
   );
 

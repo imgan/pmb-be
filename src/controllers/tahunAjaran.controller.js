@@ -27,4 +27,9 @@ const remove = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'Tahun ajaran deleted' });
 });
 
-module.exports = { list, detail, create, update, remove };
+const activate = catchAsync(async (req, res) => {
+  const data = await tahunAjaranService.activateTahunAjaran(req.params.id, req.user.id);
+  sendResponse(res, 200, { message: 'Tahun ajaran diaktifkan, semester mahasiswa naik otomatis', data });
+});
+
+module.exports = { list, detail, create, update, remove, activate };

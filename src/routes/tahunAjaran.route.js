@@ -100,4 +100,24 @@ router.put(
 );
 router.delete('/:id', authorize(MENU.TAHUN_AJARAN_MANAGEMENT, ACTION.DELETE), tahunAjaranController.remove);
 
+/**
+ * @swagger
+ * /tahun-ajaran/{id}/aktifkan:
+ *   post:
+ *     summary: Aktifkan tahun ajaran ini (menonaktifkan tahun ajaran lain) — ini adalah trigger
+ *       "naik semester" mahasiswa di sistem ini (semester dihitung otomatis dari periode aktif,
+ *       bukan kolom yang di-increment). Mengembalikan laporan mahasiswa yang semester barunya
+ *       melebihi batas wajar masa studi untuk ditinjau manual (tidak mengubah status mereka).
+ *     tags: [TahunAjaran]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdParam'
+ *     responses:
+ *       200:
+ *         description: Tahun ajaran diaktifkan
+ *       404:
+ *         description: Tahun ajaran not found
+ */
+router.post('/:id/aktifkan', authorize(MENU.TAHUN_AJARAN_MANAGEMENT, ACTION.UPDATE), tahunAjaranController.activate);
+
 module.exports = router;
