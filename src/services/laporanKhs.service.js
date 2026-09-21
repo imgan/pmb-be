@@ -2,8 +2,7 @@ const { Op } = require('sequelize');
 const { Mahasiswa, NilaiMahasiswa, GolonganKelas, Jurusan } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
-
-const GRADE_MUTU = { A: 4, B: 3, C: 2, D: 1, E: 0 };
+const { GRADE_BOBOT } = require('../utils/gradeScale');
 
 const kelasLabel = (mahasiswa) =>
   [mahasiswa.golonganKelas?.namaKelas, mahasiswa.jurusan?.namaJurusan].filter(Boolean).join(' / ');
@@ -78,7 +77,7 @@ const getKhsData = async (mahasiswaId, semester) => {
   });
 
   const nilai = nilaiList.map((n) => {
-    const bobot = GRADE_MUTU[n.grade] ?? 0;
+    const bobot = GRADE_BOBOT[n.grade] ?? 0;
     return {
       kodeMataKuliah: n.kodeMataKuliah,
       namaMataKuliah: n.namaMataKuliah,

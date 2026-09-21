@@ -3,6 +3,7 @@ const { Mahasiswa, NilaiMahasiswa, GolonganKelas, Jurusan } = require('../models
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
+const { gradeFor } = require('../utils/gradeScale');
 
 const kelasLabel = (mahasiswa) =>
   [mahasiswa.golonganKelas?.namaKelas, mahasiswa.jurusan?.namaJurusan].filter(Boolean).join(' / ');
@@ -90,20 +91,14 @@ const getNilaiByMahasiswa = async (mahasiswaId, query) => {
 const round2 = (value) => Math.round(value * 100) / 100;
 
 /**
- * Formula & ambang grade yang sama persis dengan yang dipakai seeder data nilai
- * (partisipatif 10% + tugas 20% + uts 30% + uas 40%) — proyek & quiz tersimpan tapi belum
- * ikut komponen nilai akhir, konsisten dengan data yang sudah ada di sistem ini.
+ * Formula sesuai Pedoman Akademik Poltek Bhani Bab II.F.6 (Sistem Penilaian):
+ * Kehadiran/partisipasi 10% + Tugas 10% + Quiz 10% + UTS 30% + UAS 40%. Ambang huruf
+ * (gradeFor) dan bobotnya (GRADE_BOBOT) ada di utils/gradeScale.js, dipakai bersama
+ * dengan perhitungan IPS/IPK/kuota SKS supaya konsisten satu skala di seluruh sistem.
+ * `proyek` tersimpan tapi belum jadi komponen resmi di pedoman ini.
  */
-const computeNilai = ({ partisipatif, tugas, uts, uas }) =>
-  round2(partisipatif * 0.1 + tugas * 0.2 + uts * 0.3 + uas * 0.4);
-
-const gradeFor = (nilai) => {
-  if (nilai >= 85) return 'A';
-  if (nilai >= 70) return 'B';
-  if (nilai >= 55) return 'C';
-  if (nilai >= 40) return 'D';
-  return 'E';
-};
+const computeNilai = ({ partisipatif, tugas, quiz, uts, uas }) =>
+  round2(partisipatif * 0.1 + tugas * 0.1 + quiz * 0.1 + uts * 0.3 + uas * 0.4);
 
 const NILAI_ENTRY_SORTABLE_COLUMNS = {
   namaMataKuliah: ['namaMataKuliah'],

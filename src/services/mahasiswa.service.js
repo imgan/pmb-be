@@ -49,9 +49,12 @@ const listMahasiswa = async (query) => {
     where.statusKeluar = statuses.length > 1 ? { [Op.in]: statuses } : statuses[0];
   }
 
+  // includeRelationsWithBiodata (bukan includeRelations) — daftar Mahasiswa dipakai juga oleh
+  // halaman Biodata Mahasiswa (Prodi) & kolom biodata di tabel Mahasiswa (BAAK), jadi biodata
+  // harus ikut ter-load dari sini, bukan cuma saat getMahasiswaById satu-satu.
   const { rows, count } = await Mahasiswa.findAndCountAll({
     where,
-    include: includeRelations,
+    include: includeRelationsWithBiodata,
     limit,
     offset,
     order: resolveOrder(query, SORTABLE_COLUMNS),

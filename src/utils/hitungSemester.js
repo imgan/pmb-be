@@ -14,11 +14,32 @@
  * kolom Mahasiswa.semesterDiakui / Mahasiswa.jumlahSemesterCuti.
  */
 
-// Batas normal masa studi S1 (8 tahun / 16 semester per Dikti, dengan buffer 2 semester
-// evaluasi) — dipakai untuk MENANDAI mahasiswa yang perlu ditinjau BAAK/prodi saat pergantian
-// periode aktif, BUKAN untuk otomatis men-DO. Keputusan status keluar tetap manual
-// (lihat views/prodi/mahasiswa/HabisMasaStudiView.vue).
-const MAX_SEMESTER_WAJAR = 14;
+// Batas masa studi paling lama per jenjang (Pedoman Akademik Poltek Bhani Bab II.A.1 &
+// Bab II.G.4 — Diploma III maks 10 semester/5 tahun, Diploma IV maks 14 semester/7 tahun) —
+// dipakai untuk MENANDAI mahasiswa yang perlu ditinjau BAAK/prodi saat pergantian periode
+// aktif, BUKAN untuk otomatis men-DO. Keputusan status keluar tetap manual (lihat
+// views/prodi/mahasiswa/HabisMasaStudiView.vue).
+const MAX_SEMESTER_WAJAR_D3 = 10;
+const MAX_SEMESTER_WAJAR_D4 = 14;
+// Dipertahankan sebagai fallback untuk jenjang yang tidak dikenali/kosong di master Jurusan.
+const MAX_SEMESTER_WAJAR = MAX_SEMESTER_WAJAR_D4;
+
+/**
+ * Jurusan.jenjangPendidikan adalah teks bebas (mis. "Diploma Tiga", "Diploma Empat") — dicari
+ * substring "tiga"/"iii"/"d3" utk D3, sisanya (termasuk kosong/tak dikenali) dianggap D4 supaya
+ * aman default ke batas yang lebih longgar daripada salah menandai mahasiswa lulus tepat waktu.
+ */
+const isJenjangD3 = (jenjangPendidikan) => {
+  const label = (jenjangPendidikan ?? '').toLowerCase();
+  return /(^|[^0-9])tiga([^0-9]|$)|\biii\b|\bd-?3\b/.test(label);
+};
+
+const maxSemesterWajarForJenjang = (jenjangPendidikan) =>
+  isJenjangD3(jenjangPendidikan) ? MAX_SEMESTER_WAJAR_D3 : MAX_SEMESTER_WAJAR_D4;
+
+// Masa studi NORMAL (bukan batas paling lama) — Pedoman Bab II.A.1: D3 ditempuh 6 semester,
+// D4 ditempuh 8 semester. Dipakai Evaluasi Studi tahap "menjelang akhir masa studi normal".
+const masaStudiNormalForJenjang = (jenjangPendidikan) => (isJenjangD3(jenjangPendidikan) ? 6 : 8);
 
 const kodeSemester = (jenisSemester) => (jenisSemester === 'GENAP' ? 2 : 1);
 
@@ -84,5 +105,9 @@ module.exports = {
   isMahasiswaTransfer,
   hitungSemesterBerjalan,
   resolveSemesterMahasiswa,
+  maxSemesterWajarForJenjang,
+  masaStudiNormalForJenjang,
+  MAX_SEMESTER_WAJAR_D3,
+  MAX_SEMESTER_WAJAR_D4,
   MAX_SEMESTER_WAJAR,
 };

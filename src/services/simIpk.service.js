@@ -1,13 +1,12 @@
 const { Op } = require('sequelize');
 const { Krs, TahunAjaran, Mahasiswa, Jurusan, NilaiMahasiswa } = require('../models');
-
-const GRADE_MUTU = { A: 4, B: 3, C: 2, D: 1, E: 0 };
+const { GRADE_BOBOT } = require('../utils/gradeScale');
 
 // IPS = indeks prestasi semester berjalan (nilai_mahasiswa.semester === semester KRS ybs).
 // IPK = indeks prestasi kumulatif s.d. semester berjalan (nilai_mahasiswa.semester <= semester KRS ybs).
 const hitungIp = (nilaiList) => {
   const totalSks = nilaiList.reduce((sum, n) => sum + n.sks, 0);
-  const totalMutu = nilaiList.reduce((sum, n) => sum + (GRADE_MUTU[n.grade] ?? 0) * n.sks, 0);
+  const totalMutu = nilaiList.reduce((sum, n) => sum + (GRADE_BOBOT[n.grade] ?? 0) * n.sks, 0);
   return totalSks > 0 ? totalMutu / totalSks : 0;
 };
 

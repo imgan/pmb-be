@@ -4,7 +4,9 @@ module.exports = (sequelize, DataTypes) => {
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
       nim: { type: DataTypes.STRING(30), allowNull: false, unique: true },
-      pesertaId: { type: DataTypes.INTEGER, allowNull: false, unique: true },
+      // Nullable: mahasiswa hasil migrasi data lama (bukan lewat alur pendaftaran PMB online)
+      // tidak punya baris Peserta.
+      pesertaId: { type: DataTypes.INTEGER, allowNull: true, unique: true },
       namaLengkap: { type: DataTypes.STRING(150), allowNull: false },
       email: { type: DataTypes.STRING(100), allowNull: false, validate: { isEmail: true } },
       noTelepon: { type: DataTypes.STRING(20), allowNull: true },

@@ -2,13 +2,13 @@ const { Op, fn, col, literal } = require('sequelize');
 const { Yudisium, Mahasiswa, MahasiswaBiodata, Jurusan, Dosen, NilaiMahasiswa, GolonganKelas } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
-
-const GRADE_MUTU = { A: 4, B: 3, C: 2, D: 1, E: 0 };
+const { GRADE_BOBOT } = require('../utils/gradeScale');
+const { predikatKelulusan } = require('../utils/predikat');
 
 const getRingkasanNilai = async (mahasiswaId) => {
   const nilaiList = await NilaiMahasiswa.findAll({ where: { mahasiswaId }, raw: true });
   const totalSks = nilaiList.reduce((sum, n) => sum + n.sks, 0);
-  const totalBobot = nilaiList.reduce((sum, n) => sum + (GRADE_MUTU[n.grade] ?? 0) * n.sks, 0);
+  const totalBobot = nilaiList.reduce((sum, n) => sum + (GRADE_BOBOT[n.grade] ?? 0) * n.sks, 0);
   const ipk = totalSks > 0 ? Math.round((totalBobot / totalSks) * 100) / 100 : 0;
   return { nilaiList, totalSks, totalBobot, ipk };
 };
@@ -65,6 +65,7 @@ const listGraduates = async (query) => {
         statusMasuk: row.mahasiswa.statusMasuk ?? null,
         totalSks,
         ipk,
+        predikat: predikatKelulusan(ipk),
         noSk: row.noSk,
         tanggalYudisium: row.tanggalYudisium,
       };
@@ -142,12 +143,13 @@ const getCetakData = async (mahasiswaId) => {
         namaMataKuliah: n.namaMataKuliah,
         sks: n.sks,
         semester: n.semester,
-        mutu: GRADE_MUTU[n.grade] ?? 0,
+        mutu: GRADE_BOBOT[n.grade] ?? 0,
         grade: n.grade,
       })),
     totalSks,
     totalBobot,
     ipk,
+    predikat: predikatKelulusan(ipk),
   };
 };
 

@@ -13,11 +13,10 @@ const {
 const ApiError = require('../utils/ApiError');
 const { getCetakData } = require('./suratKeterangan.service');
 const { buildSuratPdf } = require('./suratKeteranganPdf.service');
-const { assertSksQuota, getIpSemesterSebelumnya, maxSksByIp } = require('../utils/sksQuota');
+const { assertSksQuota, getIpSemesterSebelumnya, maxSksForSemester } = require('../utils/sksQuota');
 const { assertNoConflict } = require('../utils/krsConflict');
 const { resolveSemesterMahasiswa } = require('../utils/hitungSemester');
-
-const GRADE_MUTU = { A: 4, B: 3, C: 2, D: 1, E: 0 };
+const { GRADE_BOBOT } = require('../utils/gradeScale');
 
 // Semua query di service ini WAJIB discope ke mahasiswaId milik mahasiswa yang sedang login
 // (req.mahasiswa.id, diisi oleh mahasiswaAuth.middleware.js) — mahasiswa tidak boleh
@@ -89,7 +88,7 @@ const listJadwalTersedia = async (query) => {
 
 const getKuotaSks = async (mahasiswaId, semester) => {
   const ip = await getIpSemesterSebelumnya(mahasiswaId, semester);
-  return { ipSemesterSebelumnya: ip, maxSks: maxSksByIp(ip) };
+  return { ipSemesterSebelumnya: ip, maxSks: maxSksForSemester(semester, ip) };
 };
 
 const listKrs = async (mahasiswaId, query) => {
@@ -162,7 +161,7 @@ const listNilai = async (mahasiswaId, query) => {
 
   const bySemester = new Map();
   nilaiList.forEach((n) => {
-    const bobot = GRADE_MUTU[n.grade] ?? 0;
+    const bobot = GRADE_BOBOT[n.grade] ?? 0;
     const mutu = Math.round(bobot * n.sks * 100) / 100;
     const entry = {
       kodeMataKuliah: n.kodeMataKuliah,

@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Mahasiswa, MahasiswaBiodata, Jurusan, Peserta, PesertaBiodata } = require('../models');
+const { Mahasiswa, MahasiswaBiodata, Jurusan } = require('../models');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
 
@@ -19,15 +19,10 @@ const listBiodataMahasiswa = async (query) => {
   const { rows, count } = await Mahasiswa.findAndCountAll({
     where,
     include: [
-      { model: MahasiswaBiodata, as: 'biodata', attributes: ['hp', 'kelas'], required: false },
+      // Tidak dibatasi attributes — biodata dipakai untuk menampilkan seluruh kolom hasil
+      // import Excel (NIK, Jenis Kelamin, alamat, data ortu, dst), bukan cuma hp/kelas.
+      { model: MahasiswaBiodata, as: 'biodata', required: false },
       { model: Jurusan, as: 'jurusan', attributes: ['id', 'namaJurusan', 'kodeProdi'], required: false },
-      {
-        model: Peserta,
-        as: 'peserta',
-        attributes: ['id'],
-        required: false,
-        include: [{ model: PesertaBiodata, as: 'biodata', attributes: ['jenisKelamin'], required: false }],
-      },
     ],
     limit,
     offset,

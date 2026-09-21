@@ -1,9 +1,9 @@
 const { Op } = require('sequelize');
-const { sequelize, TahunAjaran, Mahasiswa } = require('../models');
+const { sequelize, TahunAjaran, Mahasiswa, Jurusan } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
-const { resolveSemesterMahasiswa, MAX_SEMESTER_WAJAR } = require('../utils/hitungSemester');
+const { resolveSemesterMahasiswa, maxSemesterWajarForJenjang } = require('../utils/hitungSemester');
 
 const SORTABLE_COLUMNS = {
   nama: ['nama'],
@@ -116,25 +116,32 @@ const activateTahunAjaran = async (id, actorId) => {
 
   const mahasiswaAktif = await Mahasiswa.findAll({
     where: { isActive: true, statusKeluar: null },
-    // required: false wajib — tahunAjaranId nullable (lihat catatan sama di jadwalKuliah.service.js
-    // & mahasiswaPortal.service.js), tanpa ini mahasiswa tanpa tahunAjaranId hilang dari hasil.
-    include: [{ model: TahunAjaran, as: 'tahunAjaran', required: false }],
+    // required: false wajib — tahunAjaranId & jurusanId nullable (lihat catatan sama di
+    // jadwalKuliah.service.js & mahasiswaPortal.service.js), tanpa ini mahasiswa tanpa relasi
+    // tsb hilang dari hasil.
+    include: [
+      { model: TahunAjaran, as: 'tahunAjaran', required: false },
+      { model: Jurusan, as: 'jurusan', required: false, attributes: ['id', 'jenjangPendidikan'] },
+    ],
   });
 
   const melebihiMasaStudi = mahasiswaAktif
-    .map((mhs) => ({
-      id: mhs.id,
-      nim: mhs.nim,
-      namaLengkap: mhs.namaLengkap,
-      semester: resolveSemesterMahasiswa(mhs, tahunAjaran),
-    }))
-    .filter((mhs) => mhs.semester > MAX_SEMESTER_WAJAR)
+    .map((mhs) => {
+      const maxSemesterWajar = maxSemesterWajarForJenjang(mhs.jurusan?.jenjangPendidikan);
+      return {
+        id: mhs.id,
+        nim: mhs.nim,
+        namaLengkap: mhs.namaLengkap,
+        semester: resolveSemesterMahasiswa(mhs, tahunAjaran),
+        maxSemesterWajar,
+      };
+    })
+    .filter((mhs) => mhs.semester > mhs.maxSemesterWajar)
     .sort((a, b) => b.semester - a.semester);
 
   return {
     tahunAjaran: await getTahunAjaranById(id),
     totalMahasiswaAktif: mahasiswaAktif.length,
-    maxSemesterWajar: MAX_SEMESTER_WAJAR,
     cutiDiproses,
     melebihiMasaStudi,
   };

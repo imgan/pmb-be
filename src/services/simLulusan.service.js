@@ -1,12 +1,12 @@
 const { Op, fn, col, literal } = require('sequelize');
 const { Yudisium, Mahasiswa, Jurusan, Krs, NilaiMahasiswa } = require('../models');
-
-const GRADE_MUTU = { A: 4, B: 3, C: 2, D: 1, E: 0 };
+const { GRADE_BOBOT } = require('../utils/gradeScale');
+const { predikatKelulusan } = require('../utils/predikat');
 
 const getIpk = async (mahasiswaId) => {
   const nilaiList = await NilaiMahasiswa.findAll({ where: { mahasiswaId }, attributes: ['sks', 'grade'], raw: true });
   const totalSks = nilaiList.reduce((sum, n) => sum + n.sks, 0);
-  const totalBobot = nilaiList.reduce((sum, n) => sum + (GRADE_MUTU[n.grade] ?? 0) * n.sks, 0);
+  const totalBobot = nilaiList.reduce((sum, n) => sum + (GRADE_BOBOT[n.grade] ?? 0) * n.sks, 0);
   return totalSks > 0 ? Number((totalBobot / totalSks).toFixed(2)) : 0;
 };
 
@@ -54,6 +54,7 @@ const listLulusan = async ({ tahun, jurusanId } = {}) => {
         nim: row.mahasiswa.nim,
         nama: row.mahasiswa.namaLengkap,
         ipk,
+        predikat: predikatKelulusan(ipk),
         lamaStudiSemester,
       };
     })
