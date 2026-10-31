@@ -12,6 +12,7 @@ module.exports = (sequelize, DataTypes) => {
       facebookUrl: { type: DataTypes.STRING(255), allowNull: true },
       instagramUrl: { type: DataTypes.STRING(255), allowNull: true },
       youtubeUrl: { type: DataTypes.STRING(255), allowNull: true },
+      tiktokUrl: { type: DataTypes.STRING(255), allowNull: true },
       logoUrl: { type: DataTypes.TEXT('long'), allowNull: true },
       faviconUrl: { type: DataTypes.TEXT('long'), allowNull: true },
       websiteTitle: { type: DataTypes.STRING(150), allowNull: true },

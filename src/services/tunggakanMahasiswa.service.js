@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
-const { TunggakanMahasiswa, Mahasiswa } = require('../models');
+const { TunggakanMahasiswa, Mahasiswa, TagihanKuliah, PembayaranKuliah, TahunAjaran, Jurusan } = require('../models');
+const { hitungSaldoTagihan, urutanPeriode } = require('../utils/tagihanSaldo');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
@@ -47,6 +48,109 @@ const listTunggakanMahasiswa = async (query) => {
     distinct: true,
   });
   return { data: rows, meta: getPagingMeta(count, page, limit) };
+};
+
+/**
+ * Tunggakan OTOMATIS dari Tagihan Mahasiswa: sisa tagihan semester-semester SEBELUM tahun ajaran
+ * aktif yang belum lunas, per mahasiswa (dihitung saat dibaca, jadi langsung berkurang bila dibayar
+ * di kasir). Tunggakan manual di tabel tunggakan_mahasiswa tetap terpisah (saldo awal / penyesuaian).
+ */
+const buildTunggakanOtomatis = async ({ search } = {}) => {
+  const aktif = await TahunAjaran.findOne({ where: { isActive: true } });
+  const batas = aktif ? urutanPeriode({ tahunAjaran: aktif }) : Infinity;
+  const mahasiswaWhere = search
+    ? { [Op.or]: [{ nim: { [Op.like]: `%${search}%` } }, { namaLengkap: { [Op.like]: `%${search}%` } }] }
+    : undefined;
+  const tagihanList = await TagihanKuliah.findAll({
+    include: [
+      {
+        model: Mahasiswa,
+        as: 'mahasiswa',
+        required: true,
+        where: mahasiswaWhere,
+        attributes: ['id', 'nim', 'namaLengkap', 'tahunMasuk'],
+        include: [{ model: Jurusan, as: 'jurusan', attributes: ['namaJurusan'], required: false }],
+      },
+      { model: TahunAjaran, as: 'tahunAjaran' },
+      { model: PembayaranKuliah, as: 'pembayaranList' },
+    ],
+  });
+
+  const byMahasiswa = new Map();
+  tagihanList
+    .filter((t) => urutanPeriode(t) < batas)
+    .forEach((t) => {
+      const sisa = hitungSaldoTagihan(t).sisaSemester;
+      if (sisa <= 0) return;
+      const m = t.mahasiswa;
+      if (!byMahasiswa.has(m.id)) {
+        byMahasiswa.set(m.id, {
+          mahasiswaId: m.id,
+          nim: m.nim,
+          namaLengkap: m.namaLengkap,
+          prodi: m.jurusan?.namaJurusan ?? '-',
+          angkatan: m.tahunMasuk,
+          rincian: [],
+          totalTunggakan: 0,
+        });
+      }
+      const entry = byMahasiswa.get(m.id);
+      entry.rincian.push({
+        urutan: urutanPeriode(t),
+        periode: t.tahunAjaran ? `${t.tahunAjaran.nama} ${t.tahunAjaran.jenisSemester}` : '-',
+        semester: t.semester,
+        sisa,
+      });
+      entry.totalTunggakan += sisa;
+    });
+  return {
+    tahunAjaranAktif: aktif ? `${aktif.nama} ${aktif.jenisSemester}` : null,
+    rows: [...byMahasiswa.values()]
+      .map((e) => ({ ...e, rincian: e.rincian.sort((a, b) => a.urutan - b.urutan).map(({ urutan, ...r }) => r) }))
+      .sort((a, b) => b.totalTunggakan - a.totalTunggakan),
+  };
+};
+
+const listTunggakanOtomatis = async (query) => {
+  const { page, limit, offset } = getPagination(query);
+  const { tahunAjaranAktif, rows } = await buildTunggakanOtomatis({ search: query.search });
+  return {
+    data: rows.slice(offset, offset + limit),
+    meta: { ...getPagingMeta(rows.length, page, limit), tahunAjaranAktif, totalNominal: rows.reduce((s, r) => s + r.totalTunggakan, 0) },
+  };
+};
+
+const exportTunggakanOtomatis = async (query = {}) => {
+  const { rows } = await buildTunggakanOtomatis({ search: query.search });
+  const data = rows.flatMap((r) =>
+    r.rincian.map((d) => ({
+      nim: r.nim,
+      namaLengkap: r.namaLengkap,
+      prodi: r.prodi,
+      angkatan: r.angkatan,
+      periode: d.periode,
+      semester: d.semester,
+      sisa: d.sisa,
+      totalTunggakan: r.totalTunggakan,
+    }))
+  );
+  const workbook = buildWorkbook(
+    'Tunggakan Otomatis',
+    [
+      { header: 'NIM', key: 'nim', width: 16 },
+      { header: 'Nama', key: 'namaLengkap', width: 30 },
+      { header: 'Prodi', key: 'prodi', width: 30 },
+      { header: 'Angkatan', key: 'angkatan', width: 10 },
+      { header: 'Periode', key: 'periode', width: 18 },
+      { header: 'Semester', key: 'semester', width: 10 },
+      { header: 'Sisa Tagihan', key: 'sisa', width: 16 },
+      { header: 'Total Tunggakan Mahasiswa', key: 'totalTunggakan', width: 22 },
+    ],
+    data
+  );
+  const sheet = workbook.getWorksheet('Tunggakan Otomatis');
+  ['sisa', 'totalTunggakan'].forEach((k) => (sheet.getColumn(k).numFmt = '#,##0'));
+  return workbook;
 };
 
 const getTunggakanMahasiswaById = async (id) => {
@@ -176,4 +280,6 @@ module.exports = {
   exportTunggakanMahasiswa,
   exportTunggakanMahasiswaTemplate,
   importTunggakanMahasiswa,
+  listTunggakanOtomatis,
+  exportTunggakanOtomatis,
 };

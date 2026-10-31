@@ -7,9 +7,16 @@ module.exports = (sequelize, DataTypes) => {
       asalSekolah: { type: DataTypes.STRING(150), allowNull: false },
       golonganKelasId: { type: DataTypes.INTEGER, allowNull: false },
       jurusanId: { type: DataTypes.INTEGER, allowNull: false },
+      // Tahun ajaran PMB saat mendaftar (otomatis = tahun PMB aktif).
+      tahunPmbId: { type: DataTypes.INTEGER, allowNull: true },
+      sumberInformasiId: { type: DataTypes.INTEGER, allowNull: true },
+      // Minat jalur pendaftaran; null = Pembiayaan Mandiri.
+      beasiswaId: { type: DataTypes.INTEGER, allowNull: true },
       noTelepon: { type: DataTypes.STRING(20), allowNull: false },
       email: { type: DataTypes.STRING(100), allowNull: false, unique: true, validate: { isEmail: true } },
       password: { type: DataTypes.STRING(255), allowNull: false },
+      // true = masih memakai password awal (nomor HP) → wajib ganti saat login.
+      wajibGantiPassword: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       statusUjian: {
         type: DataTypes.ENUM('belum_ujian', 'lulus', 'tidak_lulus'),
@@ -42,6 +49,9 @@ module.exports = (sequelize, DataTypes) => {
   Peserta.associate = (models) => {
     Peserta.belongsTo(models.GolonganKelas, { foreignKey: 'golonganKelasId', as: 'golonganKelas' });
     Peserta.belongsTo(models.Jurusan, { foreignKey: 'jurusanId', as: 'jurusan' });
+    Peserta.belongsTo(models.TahunPmb, { foreignKey: 'tahunPmbId', as: 'tahunPmb' });
+    Peserta.belongsTo(models.SumberInformasi, { foreignKey: 'sumberInformasiId', as: 'sumberInformasi' });
+    Peserta.belongsTo(models.Beasiswa, { foreignKey: 'beasiswaId', as: 'beasiswa' });
     Peserta.belongsTo(models.User, { foreignKey: 'createdBy', as: 'creator' });
     Peserta.belongsTo(models.User, { foreignKey: 'updatedBy', as: 'updater' });
     Peserta.hasOne(models.PesertaBiodata, { foreignKey: 'pesertaId', as: 'biodata' });

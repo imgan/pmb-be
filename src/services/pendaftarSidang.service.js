@@ -38,6 +38,8 @@ const listPendaftarSidang = async (query) => {
       { judul: { [Op.like]: `%${query.search}%` } },
     ];
   }
+  // Filter prodi (dipasang middleware prodiScope untuk modul Prodi).
+  if (query.jurusanId) where['$mahasiswa.jurusan_id$'] = query.jurusanId;
 
   const jadwalSidangWhere = {};
   if (query.tanggal) jadwalSidangWhere.tanggal = query.tanggal;

@@ -1,47 +1,24 @@
+/**
+ * Kurikulum (header) satu prodi pada satu tahun kurikulum, mis. "Kurikulum 2026 D3 Farmasi".
+ * Satu kurikulum memiliki banyak mata kuliah (MataKuliah.kurikulumId) — one-to-many.
+ */
 module.exports = (sequelize, DataTypes) => {
   const Kurikulum = sequelize.define(
     'Kurikulum',
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
       jurusanId: { type: DataTypes.INTEGER, allowNull: true },
-      tahunAjaranId: { type: DataTypes.INTEGER, allowNull: true },
-      kode: { type: DataTypes.STRING(30), allowNull: false },
-      mataKuliah: { type: DataTypes.STRING(200), allowNull: false },
-      mataKuliahEn: { type: DataTypes.STRING(200), allowNull: true },
-      kelompokMataKuliah: {
-        type: DataTypes.ENUM('MPK', 'MKK', 'MKB', 'MPB', 'MBB'),
-        allowNull: true,
-      },
-      kelompokKurikulum: {
-        type: DataTypes.ENUM('WAJIB', 'PILIHAN'),
-        allowNull: true,
-      },
-      jenisMataKuliah: {
-        type: DataTypes.ENUM('TEORI', 'PRAKTIK', 'TEORI_PRAKTIK'),
-        allowNull: true,
-      },
-      sksTeori: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
-      sksPraktek: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
-      sksLab: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
-      sksSimulasi: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
-      kelompokKompetensi: {
-        type: DataTypes.ENUM('UTAMA', 'PENDUKUNG', 'LAINNYA'),
-        allowNull: true,
-      },
-      kompIlmuKomputer: { type: DataTypes.STRING(100), allowNull: true },
-      mataKuliahMinat: { type: DataTypes.STRING(100), allowNull: true },
-      muatanMataKuliah: { type: DataTypes.STRING(255), allowNull: true },
-      metodePembelajaran: { type: DataTypes.STRING(100), allowNull: true },
+      // Tahun kurikulum (2020, 2023, 2026, ...). Beberapa kurikulum bisa berjalan dalam satu semester.
+      tahunKurikulum: { type: DataTypes.INTEGER, allowNull: true },
+      nama: { type: DataTypes.STRING(150), allowNull: false },
       tanggalMulaiEfektif: { type: DataTypes.DATEONLY, allowNull: true },
       tanggalAkhirEfektif: { type: DataTypes.DATEONLY, allowNull: true },
-      idMatkul: { type: DataTypes.STRING(30), allowNull: true },
-      semester: { type: DataTypes.INTEGER, allowNull: true },
-      sksTotal: {
-        type: DataTypes.VIRTUAL,
-        get() {
-          return (this.sksTeori ?? 0) + (this.sksPraktek ?? 0) + (this.sksLab ?? 0) + (this.sksSimulasi ?? 0);
-        },
-      },
+      keterangan: { type: DataTypes.TEXT, allowNull: true },
+      // Metode pembobotan pemetaan PL → CPL: MANUAL (diisi sendiri) / OTOMATIS (rata per PL).
+      metodeBobotPlCpl: { type: DataTypes.ENUM('MANUAL', 'OTOMATIS'), allowNull: false, defaultValue: 'OTOMATIS' },
+      // Level pemetaan CPL → MK: CPL (sampai CPL induk) / IK (sampai Indikator Kinerja).
+      levelPemetaanCplMk: { type: DataTypes.ENUM('CPL', 'IK'), allowNull: false, defaultValue: 'CPL' },
+      isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       isDelete: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       createdBy: { type: DataTypes.INTEGER, allowNull: true },
       updatedBy: { type: DataTypes.INTEGER, allowNull: true },
@@ -57,7 +34,7 @@ module.exports = (sequelize, DataTypes) => {
 
   Kurikulum.associate = (models) => {
     Kurikulum.belongsTo(models.Jurusan, { foreignKey: 'jurusanId', as: 'jurusan' });
-    Kurikulum.belongsTo(models.TahunAjaran, { foreignKey: 'tahunAjaranId', as: 'tahunAjaran' });
+    Kurikulum.hasMany(models.MataKuliah, { foreignKey: 'kurikulumId', as: 'mataKuliahList' });
     Kurikulum.belongsTo(models.User, { foreignKey: 'createdBy', as: 'creator' });
     Kurikulum.belongsTo(models.User, { foreignKey: 'updatedBy', as: 'updater' });
   };

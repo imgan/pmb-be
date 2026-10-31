@@ -48,4 +48,11 @@ router.get(
   laporanRealisasiController.kelasOptions
 );
 
+// PDF realisasi satu jadwal kuliah (format Realisasi Pembahasan Selama Perkuliahan, berisi data).
+router.get(
+  '/:jadwalKuliahId(\\d+)/pdf',
+  authorize(MENU.LAPORAN_CETAK_REALISASI_MANAGEMENT, ACTION.READ),
+  laporanRealisasiController.cetakPdf
+);
+
 module.exports = router;

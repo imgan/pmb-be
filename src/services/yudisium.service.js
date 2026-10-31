@@ -5,6 +5,7 @@ const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
 const { GRADE_BOBOT } = require('../utils/gradeScale');
 const { predikatKelulusan } = require('../utils/predikat');
+const { loadKelompokKode, pilihNilaiEfektif } = require('../utils/ekuivalensiMatkul');
 
 const includeRelations = [
   {
@@ -34,11 +35,15 @@ const SORTABLE_COLUMNS = {
  */
 const withIpkPredikat = async (item) => {
   if (!item) return item;
-  const nilaiList = await NilaiMahasiswa.findAll({
-    where: { mahasiswaId: item.mahasiswaId },
-    attributes: ['sks', 'grade'],
-    raw: true,
-  });
+  const [nilaiSemua, kelompokOf] = await Promise.all([
+    NilaiMahasiswa.findAll({
+      where: { mahasiswaId: item.mahasiswaId },
+      attributes: ['mahasiswaId', 'kodeMataKuliah', 'semester', 'sks', 'grade'],
+      raw: true,
+    }),
+    loadKelompokKode(),
+  ]);
+  const nilaiList = pilihNilaiEfektif(nilaiSemua, kelompokOf);
   const totalSks = nilaiList.reduce((sum, n) => sum + n.sks, 0);
   const totalMutu = nilaiList.reduce((sum, n) => sum + (GRADE_BOBOT[n.grade] ?? 0) * n.sks, 0);
   const ipk = totalSks > 0 ? Math.round((totalMutu / totalSks) * 100) / 100 : 0;
@@ -66,7 +71,7 @@ const listYudisium = async (query) => {
     {
       model: Mahasiswa,
       as: 'mahasiswa',
-      where: Object.keys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
+      where: Reflect.ownKeys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
       include: [
         { model: Jurusan, as: 'jurusan' },
         { model: MahasiswaBiodata, as: 'biodata' },

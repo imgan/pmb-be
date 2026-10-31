@@ -14,7 +14,7 @@ const INCLUDE = [{ model: Dosen, as: 'dosen', attributes: ['id', 'namaLengkap', 
 /**
  * "Prodi" & "Jumlah Mahasiswa" diturunkan dari mahasiswa yang benar-benar menunjuk
  * pembimbing_akademik_id ini (bukan kolom tersimpan) — supaya selalu sinkron. Penugasan
- * mahasiswa ke pembimbing akademik dilakukan lewat data mahasiswa, bukan dari form ini.
+ * mahasiswa ke pembimbing akademik lewat "Atur Mahasiswa" (listMahasiswaBimbingan / setMahasiswaBimbingan).
  */
 const attachMahasiswaSummary = async (rows) => {
   const ids = rows.map((r) => r.id);
@@ -95,7 +95,80 @@ const deletePembimbingAkademik = async (id) => {
   await item.update({ isDelete: true });
 };
 
+/**
+ * Daftar mahasiswa aktif untuk diatur ke pembimbing akademik `id`.
+ * status: 'bimbingan' (sudah dibimbing PA ini) | 'belum' (belum punya PA) | 'semua'.
+ * jurusanId (array dari prodiScope untuk akun Prodi) membatasi ke prodi tsb.
+ */
+const listMahasiswaBimbingan = async (id, query = {}) => {
+  const pa = await PembimbingAkademik.findByPk(id);
+  if (!pa) throw new ApiError(404, 'Data tidak ditemukan');
+  const where = { isActive: true };
+  if (query.status === 'bimbingan') where.pembimbingAkademikId = pa.id;
+  if (query.status === 'belum') where.pembimbingAkademikId = null;
+  if (query.jurusanId) where.jurusanId = query.jurusanId;
+  if (query.angkatan) where.tahunMasuk = Number(query.angkatan);
+  if (query.search) {
+    where[Op.or] = [{ nim: { [Op.like]: `%${query.search}%` } }, { namaLengkap: { [Op.like]: `%${query.search}%` } }];
+  }
+  const rows = await Mahasiswa.findAll({
+    where,
+    attributes: ['id', 'nim', 'namaLengkap', 'tahunMasuk', 'jurusanId', 'pembimbingAkademikId'],
+    include: [
+      { model: Jurusan, as: 'jurusan', attributes: ['id', 'namaJurusan'], required: false },
+      {
+        model: PembimbingAkademik,
+        as: 'pembimbingAkademik',
+        attributes: ['id'],
+        required: false,
+        include: [{ model: Dosen, as: 'dosen', attributes: ['id', 'namaLengkap'], required: false }],
+      },
+    ],
+    order: [
+      ['tahunMasuk', 'DESC'],
+      ['nim', 'ASC'],
+    ],
+  });
+  return rows.map((m) => ({
+    id: m.id,
+    nim: m.nim,
+    namaLengkap: m.namaLengkap,
+    angkatan: m.tahunMasuk,
+    prodi: m.jurusan?.namaJurusan ?? null,
+    pembimbingAkademikId: m.pembimbingAkademikId,
+    pembimbing: m.pembimbingAkademik?.dosen?.namaLengkap ?? null,
+  }));
+};
+
+/**
+ * Tetapkan (`tambah`) / lepas (`hapus`) mahasiswa dari pembimbing akademik `id`. Menetapkan
+ * mahasiswa yang sudah punya PA lain = memindahkan pembimbingnya. Untuk akun Prodi, hanya
+ * mahasiswa dari prodinya yang diproses (scopeJurusanIds dari prodiScope).
+ */
+const setMahasiswaBimbingan = async (id, { tambah = [], hapus = [] }, actorId, scopeJurusanIds) => {
+  const pa = await PembimbingAkademik.findByPk(id);
+  if (!pa) throw new ApiError(404, 'Data tidak ditemukan');
+  const scope = scopeJurusanIds ? { jurusanId: [].concat(scopeJurusanIds).map(Number) } : {};
+  let ditetapkan = 0;
+  let dilepas = 0;
+  if (tambah.length) {
+    [ditetapkan] = await Mahasiswa.update(
+      { pembimbingAkademikId: pa.id, updatedBy: actorId },
+      { where: { id: { [Op.in]: tambah }, ...scope } }
+    );
+  }
+  if (hapus.length) {
+    [dilepas] = await Mahasiswa.update(
+      { pembimbingAkademikId: null, updatedBy: actorId },
+      { where: { id: { [Op.in]: hapus }, pembimbingAkademikId: pa.id, ...scope } }
+    );
+  }
+  return { ditetapkan, dilepas };
+};
+
 module.exports = {
+  listMahasiswaBimbingan,
+  setMahasiswaBimbingan,
   listPembimbingAkademik,
   getPembimbingAkademikById,
   createPembimbingAkademik,

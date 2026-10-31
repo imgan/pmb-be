@@ -3,8 +3,9 @@ module.exports = (sequelize, DataTypes) => {
     'KonversiKurikulum',
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-      dariKurikulumId: { type: DataTypes.INTEGER, allowNull: false, unique: true },
-      keKurikulumId: { type: DataTypes.INTEGER, allowNull: true },
+      // Mata kuliah kurikulum lama → padanannya di kurikulum baru.
+      dariMataKuliahId: { type: DataTypes.INTEGER, allowNull: false, unique: true },
+      keMataKuliahId: { type: DataTypes.INTEGER, allowNull: true },
       createdBy: { type: DataTypes.INTEGER, allowNull: true },
       updatedBy: { type: DataTypes.INTEGER, allowNull: true },
     },
@@ -16,8 +17,8 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   KonversiKurikulum.associate = (models) => {
-    KonversiKurikulum.belongsTo(models.Kurikulum, { foreignKey: 'dariKurikulumId', as: 'dariKurikulum' });
-    KonversiKurikulum.belongsTo(models.Kurikulum, { foreignKey: 'keKurikulumId', as: 'keKurikulum' });
+    KonversiKurikulum.belongsTo(models.MataKuliah, { foreignKey: 'dariMataKuliahId', as: 'dariMataKuliah' });
+    KonversiKurikulum.belongsTo(models.MataKuliah, { foreignKey: 'keMataKuliahId', as: 'keMataKuliah' });
     KonversiKurikulum.belongsTo(models.User, { foreignKey: 'createdBy', as: 'creator' });
     KonversiKurikulum.belongsTo(models.User, { foreignKey: 'updatedBy', as: 'updater' });
   };

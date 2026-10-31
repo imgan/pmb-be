@@ -3,7 +3,8 @@ module.exports = (sequelize, DataTypes) => {
     'TahunAjaran',
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-      nama: { type: DataTypes.STRING(20), allowNull: false, unique: true },
+      // Unik bersama jenisSemester (index uq_tahun_ajaran_nama_semester): Ganjil & Genap memakai nama yang sama.
+      nama: { type: DataTypes.STRING(20), allowNull: false },
       tahunMulai: { type: DataTypes.INTEGER, allowNull: false },
       tahunSelesai: { type: DataTypes.INTEGER, allowNull: false },
       jenisSemester: { type: DataTypes.ENUM('GANJIL', 'GENAP'), allowNull: false, defaultValue: 'GANJIL' },

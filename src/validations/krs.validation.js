@@ -17,4 +17,9 @@ const updateKrs = Joi.object({
   jadwalKuliahIds: Joi.array().items(Joi.number().integer()),
 }).min(1);
 
-module.exports = { createKrs, updateKrs };
+/** Setujui banyak KRS sekaligus (BAAK & dosen PA). */
+const setujuiMassal = Joi.object({
+  ids: Joi.array().items(Joi.number().integer()).min(1).max(500).unique().required(),
+});
+
+module.exports = { createKrs, updateKrs, setujuiMassal };

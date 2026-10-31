@@ -12,7 +12,7 @@ module.exports = (sequelize, DataTypes) => {
       isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       isPublic: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       module: {
-        type: DataTypes.ENUM('pmb', 'baak', 'sdi', 'prodi', 'keuangan', 'sim'),
+        type: DataTypes.ENUM('pmb', 'baak', 'sdi', 'prodi', 'keuangan', 'sim', 'admin', 'lms'),
         allowNull: false,
         defaultValue: 'pmb',
       },

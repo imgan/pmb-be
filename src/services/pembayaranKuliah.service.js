@@ -1,8 +1,8 @@
 const { Op } = require('sequelize');
-const { PembayaranKuliah, TagihanKuliah, Mahasiswa, Jurusan } = require('../models');
+const { PembayaranKuliah, TagihanKuliah, Mahasiswa, Jurusan, sequelize } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
-const { postJurnal, getAkunByKode } = require('./jurnal.service');
+const { postJurnal, getAkunByKode, hapusJurnalReferensi } = require('./jurnal.service');
 
 const includeRelations = [
   {
@@ -37,7 +37,7 @@ const listPembayaranKuliah = async (query) => {
             model: Mahasiswa,
             as: 'mahasiswa',
             required: true,
-            where: Object.keys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
+            where: Reflect.ownKeys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
             include: [{ model: Jurusan, as: 'jurusan' }],
           },
         ],
@@ -77,10 +77,14 @@ const createPembayaranKuliah = async (payload, actorId) => {
   return PembayaranKuliah.findByPk(pembayaran.id, { include: includeRelations });
 };
 
+// Hapus transaksi beserta jurnal Kas/Pendapatan-nya supaya buku besar tidak menyimpan jurnal yatim.
 const deletePembayaranKuliah = async (id) => {
   const pembayaran = await PembayaranKuliah.findByPk(id);
   if (!pembayaran) throw new ApiError(404, 'Pembayaran kuliah tidak ditemukan');
-  await pembayaran.destroy();
+  await sequelize.transaction(async (transaction) => {
+    await hapusJurnalReferensi('PEMBAYARAN_KULIAH', pembayaran.id, transaction);
+    await pembayaran.destroy({ transaction });
+  });
 };
 
 module.exports = { listPembayaranKuliah, createPembayaranKuliah, deletePembayaranKuliah };

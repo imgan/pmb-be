@@ -17,7 +17,7 @@ const updateMahasiswa = Joi.object({
   semesterOverride: Joi.number().integer().min(1).allow(null),
   isActive: Joi.boolean(),
   statusKeluar: Joi.string()
-    .valid('CUTI', 'MENGUNDURKAN_DIRI', 'DROP_OUT', 'HABIS_MASA_STUDI', 'MUTASI', 'PUTUS_SEKOLAH', 'WAFAT', 'HILANG', 'LAINNYA')
+    .valid('CUTI', 'MENGUNDURKAN_DIRI', 'DROP_OUT', 'HABIS_MASA_STUDI', 'MUTASI', 'PUTUS_SEKOLAH', 'WAFAT', 'HILANG', 'LAINNYA', 'MENUNGGU_UKOM')
     .allow(null),
   tanggalKeluar: Joi.date().allow(null),
   alasanKeluar: Joi.string().allow('', null),

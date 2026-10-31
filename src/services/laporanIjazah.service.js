@@ -4,9 +4,16 @@ const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { GRADE_BOBOT } = require('../utils/gradeScale');
 const { predikatKelulusan } = require('../utils/predikat');
+const { loadKelompokKode, pilihNilaiEfektif } = require('../utils/ekuivalensiMatkul');
 
 const getRingkasanNilai = async (mahasiswaId) => {
-  const nilaiList = await NilaiMahasiswa.findAll({ where: { mahasiswaId }, raw: true });
+  // Transkrip ijazah hanya memuat nilai yang diakui: mata kuliah yang diulang (termasuk lewat
+  // konversi kurikulum) tampil sekali dengan nilai terbaiknya.
+  const [nilaiSemua, kelompokOf] = await Promise.all([
+    NilaiMahasiswa.findAll({ where: { mahasiswaId }, raw: true }),
+    loadKelompokKode(),
+  ]);
+  const nilaiList = pilihNilaiEfektif(nilaiSemua, kelompokOf);
   const totalSks = nilaiList.reduce((sum, n) => sum + n.sks, 0);
   const totalBobot = nilaiList.reduce((sum, n) => sum + (GRADE_BOBOT[n.grade] ?? 0) * n.sks, 0);
   const ipk = totalSks > 0 ? Math.round((totalBobot / totalSks) * 100) / 100 : 0;
@@ -36,7 +43,7 @@ const listGraduates = async (query) => {
       {
         model: Mahasiswa,
         as: 'mahasiswa',
-        where: Object.keys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
+        where: Reflect.ownKeys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
         include: [
           { model: Jurusan, as: 'jurusan' },
           { model: MahasiswaBiodata, as: 'biodata' },

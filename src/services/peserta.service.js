@@ -1,17 +1,21 @@
 const bcrypt = require('bcryptjs');
-const { Op } = require('sequelize');
-const { Peserta, GolonganKelas, Jurusan, PesertaBiodata, PesertaDokumen, DokumenKelengkapan } = require('../models');
+const { Op, literal } = require('sequelize');
+const { Peserta, GolonganKelas, Jurusan, PesertaBiodata, PesertaDokumen, DokumenKelengkapan, Mahasiswa, SumberInformasi, Beasiswa } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
-const generateRandomPassword = require('../utils/generatePassword');
+const { normalisasiHp, sqlHpBersih, variasiHp } = require('../utils/nomorHp');
 const { sendMail } = require('../utils/mailer');
 const { generateAccessToken } = require('../utils/jwt');
 const { generateResetToken, hashToken } = require('../utils/resetToken');
 const { resolveOrder } = require('../utils/sorting');
+const { syncFlagDokumen } = require('../utils/statusDokumen');
+const tahunModulService = require('./tahunModul.service');
 
 const includeRelations = [
   { model: GolonganKelas, as: 'golonganKelas' },
   { model: Jurusan, as: 'jurusan' },
+  { model: SumberInformasi, as: 'sumberInformasi', attributes: ['id', 'namaInformasi'] },
+  { model: Beasiswa, as: 'beasiswa', attributes: ['id', 'namaBeasiswa'] },
 ];
 
 const SORTABLE_COLUMNS = {
@@ -46,8 +50,8 @@ const sendPesertaCredentialsEmail = async (peserta, plainPassword) => {
       html: `
         <p>Halo ${peserta.namaLengkap},</p>
         <p>Terima kasih telah melakukan pendaftaran PMB. Berikut adalah akun Anda untuk login:</p>
-        <p>Email: ${peserta.email}<br/>Password: <b>${plainPassword}</b></p>
-        <p>Segera login dan ganti password Anda demi keamanan akun.</p>
+        <p>Username: <b>${peserta.noTelepon}</b> (nomor HP) atau ${peserta.email}<br/>Password awal: <b>${plainPassword}</b> (nomor HP Anda)</p>
+        <p>Anda akan diminta mengganti password saat login pertama demi keamanan akun.</p>
       `,
     });
     return true;
@@ -97,20 +101,34 @@ const getPesertaById = async (id) => {
   return peserta;
 };
 
-const createPesertaWithGeneratedPassword = async (payload, actorId) => {
+/** Sumber informasi & jalur (beasiswa) opsional; bila diisi harus ada di master. */
+const ensureReferensiValid = async ({ sumberInformasiId, beasiswaId }) => {
+  if (sumberInformasiId && !(await SumberInformasi.findByPk(sumberInformasiId))) throw new ApiError(400, 'Sumber informasi tidak ditemukan');
+  if (beasiswaId && !(await Beasiswa.findByPk(beasiswaId))) throw new ApiError(400, 'Jalur beasiswa tidak ditemukan');
+};
+
+/** payload.biodata (opsional, dari form pendaftaran publik) disimpan bersama akun dan langsung terkunci. */
+const createPesertaWithGeneratedPassword = async ({ biodata, ...payload }, actorId) => {
   await ensureKelasJurusanValid(payload.golonganKelasId, payload.jurusanId);
+  if (biodata && (await PesertaBiodata.findOne({ where: { nik: biodata.nik } }))) throw new ApiError(409, 'NIK sudah terdaftar');
+  await ensureReferensiValid(payload);
 
   const existing = await Peserta.findOne({ where: { email: payload.email } });
   if (existing) throw new ApiError(409, 'Email already registered');
 
-  const plainPassword = generateRandomPassword();
+  // Password awal = nomor HP (dinormalisasi), wajib diganti saat login pertama.
+  const plainPassword = normalisasiHp(payload.noTelepon);
+  if (plainPassword.length < 8) throw new ApiError(400, 'Nomor HP tidak valid (minimal 8 digit)');
   const hashed = await bcrypt.hash(plainPassword, 10);
 
-  const peserta = await Peserta.create({
-    ...payload,
-    password: hashed,
-    createdBy: actorId,
-    updatedBy: actorId,
+  const tahunPmbId = (await tahunModulService.aktif('pmb'))?.id ?? null;
+  const peserta = await Peserta.sequelize.transaction(async (transaction) => {
+    const baru = await Peserta.create(
+      { ...payload, password: hashed, wajibGantiPassword: true, tahunPmbId, createdBy: actorId, updatedBy: actorId },
+      { transaction }
+    );
+    if (biodata) await PesertaBiodata.create({ ...biodata, pesertaId: baru.id, isLocked: true }, { transaction });
+    return baru;
   });
 
   const emailSent = await sendPesertaCredentialsEmail(peserta, plainPassword);
@@ -130,13 +148,17 @@ const updatePeserta = async (id, payload, actorId) => {
   if (payload.golonganKelasId || payload.jurusanId) {
     await ensureKelasJurusanValid(nextGolonganKelasId, nextJurusanId);
   }
+  await ensureReferensiValid(payload);
 
   if (payload.email) {
     const existing = await Peserta.findOne({ where: { email: payload.email, id: { [Op.ne]: id } } });
     if (existing) throw new ApiError(409, 'Email already registered');
   }
 
-  await peserta.update({ ...payload, updatedBy: actorId });
+  // Peserta belum mengganti password awal: password ikut No. HP yang baru supaya tetap "password = No. HP".
+  const ikutHp =
+    payload.noTelepon && peserta.wajibGantiPassword && normalisasiHp(payload.noTelepon) !== normalisasiHp(peserta.noTelepon) && normalisasiHp(payload.noTelepon).length >= 8;
+  await peserta.update({ ...payload, ...(ikutHp ? { password: await bcrypt.hash(normalisasiHp(payload.noTelepon), 10) } : {}), updatedBy: actorId });
   return getPesertaById(id);
 };
 
@@ -149,6 +171,7 @@ const updateMyProfile = async (pesertaId, payload) => {
   if (payload.golonganKelasId || payload.jurusanId) {
     await ensureKelasJurusanValid(nextGolonganKelasId, nextJurusanId);
   }
+  await ensureReferensiValid(payload);
 
   if (payload.email) {
     const existing = await Peserta.findOne({ where: { email: payload.email, id: { [Op.ne]: pesertaId } } });
@@ -166,13 +189,24 @@ const deletePeserta = async (id, actorId) => {
   await peserta.destroy();
 };
 
-const loginPeserta = async (email, password) => {
-  const peserta = await Peserta.scope('withPassword').findOne({ where: { email } });
-  if (!peserta) throw new ApiError(401, 'Email atau password salah');
+/** Akun peserta dari username login: email (mengandung "@") atau nomor HP (format 08… / 628… / +62…). */
+const cariAkunLogin = async (username) => {
+  const nilai = String(username ?? '').trim();
+  if (nilai.includes('@')) return Peserta.scope('withPassword').findOne({ where: { email: nilai } });
+  const variasi = variasiHp(nilai);
+  if (!variasi.length) return null;
+  const akun = await Peserta.scope('withPassword').findAll({ where: literal(`${sqlHpBersih('no_telepon')} IN (${variasi.map((v) => Peserta.sequelize.escape(v)).join(', ')})`), limit: 2 });
+  if (akun.length > 1) throw new ApiError(409, 'Nomor HP ini dipakai lebih dari satu akun. Silakan masuk menggunakan email.');
+  return akun[0] ?? null;
+};
+
+const loginPeserta = async (username, password) => {
+  const peserta = await cariAkunLogin(username);
+  if (!peserta) throw new ApiError(401, 'Nomor HP/email atau password salah');
   if (!peserta.isActive) throw new ApiError(403, 'Akun peserta tidak aktif');
 
   const isMatch = await bcrypt.compare(password, peserta.password);
-  if (!isMatch) throw new ApiError(401, 'Email atau password salah');
+  if (!isMatch) throw new ApiError(401, 'Nomor HP/email atau password salah');
 
   const accessToken = generateAccessToken({ sub: peserta.id, type: 'peserta' });
   return { peserta: await getPesertaById(peserta.id), accessToken };
@@ -210,12 +244,37 @@ const resetPasswordPeserta = async (token, newPassword) => {
   if (!peserta) throw new ApiError(400, 'Token reset password tidak valid atau sudah kedaluwarsa');
 
   const hashedPassword = await bcrypt.hash(newPassword, 10);
-  await peserta.update({ password: hashedPassword, resetPasswordToken: null, resetPasswordExpires: null });
+  await peserta.update({ password: hashedPassword, wajibGantiPassword: false, resetPasswordToken: null, resetPasswordExpires: null });
+};
+
+/** Peserta mengganti password sendiri (wajib saat masih memakai password awal = nomor HP). */
+const gantiPasswordSaya = async (pesertaId, { passwordLama, passwordBaru }) => {
+  const peserta = await Peserta.scope('withPassword').findByPk(pesertaId);
+  if (!peserta) throw new ApiError(404, 'Peserta not found');
+  if (!(await bcrypt.compare(passwordLama, peserta.password))) throw new ApiError(400, 'Password lama salah');
+  if (passwordBaru === passwordLama) throw new ApiError(400, 'Password baru harus berbeda dari password lama');
+  if (variasiHp(passwordBaru).includes(normalisasiHp(peserta.noTelepon))) throw new ApiError(400, 'Password baru tidak boleh sama dengan nomor HP');
+  await peserta.update({ password: await bcrypt.hash(passwordBaru, 10), wajibGantiPassword: false });
+  return getPesertaById(pesertaId);
+};
+
+/** Admin mereset password peserta ke default (nomor HP); peserta wajib menggantinya saat login berikutnya. */
+const resetPasswordDefault = async (pesertaId, actorId) => {
+  const peserta = await Peserta.findByPk(pesertaId);
+  if (!peserta) throw new ApiError(404, 'Peserta not found');
+  const plain = normalisasiHp(peserta.noTelepon);
+  if (plain.length < 8) throw new ApiError(400, 'Nomor HP peserta tidak valid; perbaiki nomor HP terlebih dahulu');
+  await peserta.update({ password: await bcrypt.hash(plain, 10), wajibGantiPassword: true, updatedBy: actorId });
+  return { username: plain, email: peserta.email };
 };
 
 const getMyProfile = (pesertaId) => getPesertaById(pesertaId);
 
-const saveBiodata = async (pesertaId, payload) => {
+/**
+ * Simpan biodata. Peserta (oleh = 'peserta'): ditolak bila biodata sudah terkunci, dan terkunci lagi setelah disimpan.
+ * Admin (oleh = 'admin'): selalu boleh; status kunci tidak diubah (biodata baru langsung terkunci).
+ */
+const saveBiodata = async (pesertaId, payload, oleh = 'peserta') => {
   const peserta = await Peserta.findByPk(pesertaId);
   if (!peserta) throw new ApiError(404, 'Peserta not found');
 
@@ -223,12 +282,31 @@ const saveBiodata = async (pesertaId, payload) => {
   if (existingByNik) throw new ApiError(409, 'NIK already registered');
 
   const biodata = await PesertaBiodata.findOne({ where: { pesertaId } });
+  if (biodata?.isLocked && oleh === 'peserta') {
+    throw new ApiError(403, 'Biodata sudah dikunci. Hubungi admin PMB untuk membuka kunci bila ada data yang perlu diperbaiki.');
+  }
   if (biodata) {
-    await biodata.update(payload);
+    await biodata.update(oleh === 'peserta' ? { ...payload, isLocked: true } : payload);
   } else {
-    await PesertaBiodata.create({ ...payload, pesertaId });
+    await PesertaBiodata.create({ isAgree: true, ...payload, pesertaId, isLocked: true });
   }
 
+  return getPesertaById(pesertaId);
+};
+
+/** Admin: buka (false) / kunci (true) biodata peserta. */
+const setBiodataLock = async (pesertaId, isLocked) => {
+  const biodata = await PesertaBiodata.findOne({ where: { pesertaId } });
+  if (!biodata) throw new ApiError(404, 'Peserta belum mengisi biodata');
+  await biodata.update({ isLocked });
+  return getPesertaById(pesertaId);
+};
+
+/** Admin: hapus biodata peserta (peserta dapat mengisinya ulang). */
+const removeBiodata = async (pesertaId) => {
+  const biodata = await PesertaBiodata.findOne({ where: { pesertaId } });
+  if (!biodata) throw new ApiError(404, 'Peserta belum mengisi biodata');
+  await biodata.destroy();
   return getPesertaById(pesertaId);
 };
 
@@ -259,20 +337,63 @@ const uploadMyDokumen = async (pesertaId, dokumenKelengkapanId, payload) => {
   if (!kelengkapan) throw new ApiError(404, 'Jenis dokumen kelengkapan not found');
 
   const existing = await PesertaDokumen.findOne({ where: { pesertaId, dokumenKelengkapanId } });
+  let dokumen;
   if (existing) {
     await existing.update({ fileName: payload.fileName, file: payload.file });
-    return existing;
+    dokumen = existing;
+  } else {
+    dokumen = await PesertaDokumen.create({ pesertaId, dokumenKelengkapanId, ...payload });
   }
-  return PesertaDokumen.create({ pesertaId, dokumenKelengkapanId, ...payload });
+  await syncFlagDokumen(pesertaId);
+  return dokumen;
 };
 
 const removeMyDokumen = async (pesertaId, dokumenKelengkapanId) => {
   const existing = await PesertaDokumen.findOne({ where: { pesertaId, dokumenKelengkapanId } });
   if (!existing) throw new ApiError(404, 'Dokumen not found');
   await existing.destroy();
+  await syncFlagDokumen(pesertaId);
+};
+
+/**
+ * Rekap PMB per tahun (berdasarkan tanggal akun peserta dibuat) dalam rentang tanggal:
+ *  - Tamu        : semua akun peserta yang terdaftar di portal PMB
+ *  - Mendaftar   : peserta yang sudah mengisi biodata/formulir pendaftaran
+ *  - Daftar Ulang: peserta yang sudah dijadikan Mahasiswa (sudah punya NIM)
+ */
+const getGrafikTahunan = async ({ dariTanggal, sampaiTanggal } = {}) => {
+  const where = {};
+  if (dariTanggal || sampaiTanggal) {
+    where.createdAt = {};
+    if (dariTanggal) where.createdAt[Op.gte] = new Date(`${dariTanggal}T00:00:00`);
+    if (sampaiTanggal) where.createdAt[Op.lte] = new Date(`${sampaiTanggal}T23:59:59`);
+  }
+
+  const rows = await Peserta.findAll({
+    where,
+    attributes: ['id', 'createdAt'],
+    include: [
+      { model: PesertaBiodata, as: 'biodata', attributes: ['id', 'nik'], required: false },
+      { model: Mahasiswa, as: 'mahasiswa', attributes: ['id'], required: false },
+    ],
+  });
+
+  const byTahun = new Map();
+  rows.forEach((p) => {
+    const tahun = new Date(p.createdAt).getFullYear();
+    if (!byTahun.has(tahun)) byTahun.set(tahun, { tahun, tamu: 0, mendaftar: 0, daftarUlang: 0 });
+    const entry = byTahun.get(tahun);
+    entry.tamu += 1;
+    // Biodata bisa berisi data pendidikan saja; dianggap mendaftar bila biodata pribadi (NIK) sudah diisi.
+    if (p.biodata?.nik) entry.mendaftar += 1;
+    if (p.mahasiswa) entry.daftarUlang += 1;
+  });
+
+  return [...byTahun.values()].sort((a, b) => a.tahun - b.tahun);
 };
 
 module.exports = {
+  getGrafikTahunan,
   listPeserta,
   getPesertaById,
   registerPeserta,
@@ -280,11 +401,15 @@ module.exports = {
   updatePeserta,
   deletePeserta,
   loginPeserta,
+  gantiPasswordSaya,
+  resetPasswordDefault,
   forgotPasswordPeserta,
   resetPasswordPeserta,
   getMyProfile,
   updateMyProfile,
   saveBiodata,
+  setBiodataLock,
+  removeBiodata,
   listMyDokumen,
   uploadMyDokumen,
   removeMyDokumen,

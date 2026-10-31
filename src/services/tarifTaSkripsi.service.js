@@ -1,13 +1,18 @@
-const { TarifTaSkripsi, Jurusan } = require('../models');
+const { TarifTaSkripsi, Jurusan, TahunAjaran } = require('../models');
+const { formatTahunAjaran } = require('../utils/tahunAjaran');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
 const { buildWorkbook, parseWorkbookFromBase64, cellString, cellBoolean } = require('../utils/excel');
 
-const includeRelations = [{ model: Jurusan, as: 'jurusan', required: false }];
+const includeRelations = [
+  { model: Jurusan, as: 'jurusan', required: false },
+  { model: TahunAjaran, as: 'tahunAjaran', attributes: ['id', 'nama', 'jenisSemester'], required: false },
+];
 
 const EXPORT_COLUMNS = [
   { header: 'Prodi', key: 'jurusan', width: 30 },
+  { header: 'Tahun Akademik', key: 'tahunAkademik', width: 22 },
   { header: 'Periode', key: 'periode', width: 12 },
   { header: 'Biaya Pendaftaran', key: 'biayaPendaftaran', width: 20 },
   { header: 'Biaya Perpanjangan', key: 'biayaPerpanjangan', width: 20 },
@@ -23,6 +28,7 @@ const cellNumber = (value) => {
 
 const SORTABLE_COLUMNS = {
   periode: ['periode'],
+  tahunAjaran: [{ model: TahunAjaran, as: 'tahunAjaran' }, 'nama'],
   biayaPendaftaran: ['biayaPendaftaran'],
   biayaPerpanjangan: ['biayaPerpanjangan'],
   isActive: ['isActive'],
@@ -33,6 +39,7 @@ const listTarifTaSkripsi = async (query) => {
   const { page, limit, offset } = getPagination(query);
   const where = {};
   if (query.periode) where.periode = query.periode;
+  if (query.tahunAjaranId) where.tahunAjaranId = query.tahunAjaranId;
   if (query.jurusanId) where.jurusanId = query.jurusanId;
   if (query.isActive !== undefined) where.isActive = query.isActive === 'true' || query.isActive === true;
 
@@ -74,6 +81,7 @@ const exportTarifTaSkripsi = async () => {
   const rows = await TarifTaSkripsi.findAll({ include: includeRelations, order: [['periode', 'DESC']] });
   const data = rows.map((t) => ({
     jurusan: t.jurusan?.namaJurusan ?? '',
+    tahunAkademik: formatTahunAjaran(t.tahunAjaran) ?? '',
     periode: t.periode,
     biayaPendaftaran: t.biayaPendaftaran,
     biayaPerpanjangan: t.biayaPerpanjangan,
@@ -85,6 +93,7 @@ const exportTarifTaSkripsi = async () => {
 const exportTarifTaSkripsiTemplate = () => {
   const sample = {
     jurusan: 'Nama Prodi (sesuai master data)',
+    tahunAkademik: '2026/2027 GANJIL',
     periode: 2026,
     biayaPendaftaran: 1000000,
     biayaPerpanjangan: 250000,
@@ -97,8 +106,16 @@ const exportTarifTaSkripsiTemplate = () => {
  * Boleh MEMBUAT baru sekaligus mengubah yang sudah ada (dicocokkan lewat Prodi + Periode),
  * dipakai untuk migrasi tarif TA/skripsi dari sistem kampus lama.
  */
+/** "2026/2027 GANJIL" (format export) -> id tahun ajaran; tanpa semester dicocokkan lewat nama saja. */
+const resolveTahunAjaranId = (tahunAjaranList, text) => {
+  const [nama, jenis] = text.trim().toUpperCase().split(/s+/);
+  const match = tahunAjaranList.find((t) => t.nama === nama && (!jenis || t.jenisSemester === jenis));
+  return match?.id ?? null;
+};
+
 const importTarifTaSkripsi = async (fileBase64, actorId) => {
   const rows = await parseWorkbookFromBase64(fileBase64);
+  const tahunAjaranList = await TahunAjaran.findAll({ attributes: ['id', 'nama', 'jenisSemester'] });
   const errors = [];
   let successCount = 0;
 
@@ -120,9 +137,17 @@ const importTarifTaSkripsi = async (fileBase64, actorId) => {
       continue;
     }
 
+    const tahunAkademikText = cellString(data['Tahun Akademik']);
+    const tahunAjaranId = tahunAkademikText ? resolveTahunAjaranId(tahunAjaranList, tahunAkademikText) : null;
+    if (tahunAkademikText && !tahunAjaranId) {
+      errors.push({ row: rowNumber, message: `Tahun Akademik "${tahunAkademikText}" tidak ditemukan (format: 2026/2027 GANJIL)` });
+      continue;
+    }
+
     const payload = {
       jurusanId: jurusan.id,
       periode,
+      ...(tahunAkademikText ? { tahunAjaranId } : {}),
       biayaPendaftaran: cellNumber(data['Biaya Pendaftaran']),
       biayaPerpanjangan: cellNumber(data['Biaya Perpanjangan']),
       isActive: cellBoolean(data['Status Aktif'], true),

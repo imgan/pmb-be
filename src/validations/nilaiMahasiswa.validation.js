@@ -9,4 +9,8 @@ const updateNilaiEntry = Joi.object({
   uas: Joi.number().min(0).max(100),
 }).min(1);
 
-module.exports = { updateNilaiEntry };
+const importNilai = Joi.object({
+  file: Joi.string().required(),
+});
+
+module.exports = { updateNilaiEntry, importNilai };

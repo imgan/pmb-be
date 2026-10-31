@@ -10,7 +10,7 @@ const SORTABLE_COLUMNS = {
 };
 
 const INCLUDE = [
-  { model: TahunAjaran, as: 'tahunAjaran', attributes: ['id', 'nama'], required: false },
+  { model: TahunAjaran, as: 'tahunAjaran', attributes: ['id', 'nama', 'jenisSemester'], required: false },
   { model: Jurusan, as: 'jurusan', attributes: ['id', 'namaJurusan', 'kodeProdi'], required: false },
   { model: Dosen, as: 'dosenPenguji', attributes: ['id', 'namaLengkap', 'nidn'], required: false },
 ];

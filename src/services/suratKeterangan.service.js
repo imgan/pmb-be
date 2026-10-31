@@ -1,8 +1,21 @@
 const { Op } = require('sequelize');
-const { SuratKeterangan, Mahasiswa, MahasiswaBiodata, Jurusan } = require('../models');
+const {
+  SuratKeterangan,
+  Mahasiswa,
+  MahasiswaBiodata,
+  Jurusan,
+  PendaftarSidang,
+  JadwalSidang,
+  TahunAjaran,
+  Dosen,
+} = require('../models');
 const ApiError = require('../utils/ApiError');
+const { formatTahunAjaran } = require('../utils/tahunAjaran');
+const nilaiSidangService = require('./nilaiSidang.service');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
+
+const SIDANG_JENIS = ['DAFTAR_SIDANG_TA', 'REKAP_NILAI_SIDANG', 'JURNAL_KONSULTASI_TA'];
 
 const includeMahasiswa = [{ model: Mahasiswa, as: 'mahasiswa', attributes: ['id', 'nim', 'namaLengkap'] }];
 
@@ -28,7 +41,7 @@ const listSurat = async (query) => {
   const { rows, count } = await SuratKeterangan.findAndCountAll({
     where,
     include: [
-      { model: Mahasiswa, as: 'mahasiswa', attributes: ['id', 'nim', 'namaLengkap'], where: Object.keys(mahasiswaWhere).length ? mahasiswaWhere : undefined },
+      { model: Mahasiswa, as: 'mahasiswa', attributes: ['id', 'nim', 'namaLengkap'], where: Reflect.ownKeys(mahasiswaWhere).length ? mahasiswaWhere : undefined },
     ],
     limit,
     offset,
@@ -100,6 +113,39 @@ const getCetakData = async (id) => {
   const biodata = mahasiswa?.biodata ?? null;
   const jurusan = mahasiswa?.jurusan ?? null;
 
+  // Data sidang untuk Formulir Pendaftaran Sidang TA, Rekapitulasi Nilai Sidang & Jurnal Konsultasi TA — diambil dari
+  // data Pendaftar Sidang terakhir milik mahasiswa (modul Prodi) beserta jadwal sidangnya.
+  // Kosong bila belum didaftarkan; formulir lalu menyisakan garis isian untuk ditulis tangan.
+  let pembimbing = [];
+  let sidang = null;
+  if (SIDANG_JENIS.includes(surat.jenisSurat)) {
+    const pendaftar = await PendaftarSidang.findOne({
+      where: { mahasiswaId: mahasiswa.id },
+      include: [
+        { model: Dosen, as: 'pembimbing1', attributes: ['namaLengkap'] },
+        { model: Dosen, as: 'pembimbing2', attributes: ['namaLengkap'] },
+        {
+          model: JadwalSidang,
+          as: 'jadwalSidang',
+          include: [
+            { model: TahunAjaran, as: 'tahunAjaran', attributes: ['nama', 'jenisSemester'] },
+            { model: Dosen, as: 'dosenPenguji', attributes: ['namaLengkap'] },
+          ],
+        },
+      ],
+      order: [['id', 'DESC']],
+    });
+    pembimbing = [pendaftar?.pembimbing1?.namaLengkap ?? null, pendaftar?.pembimbing2?.namaLengkap ?? null];
+    sidang = {
+      judul: pendaftar?.judul ?? null,
+      tahunAjaran: formatTahunAjaran(pendaftar?.jadwalSidang?.tahunAjaran, pendaftar?.jadwalSidang?.semester),
+      // Jadwal sidang baru menyimpan satu dosen penguji; Penguji II dibiarkan kosong.
+      penguji: [pendaftar?.jadwalSidang?.dosenPenguji?.namaLengkap ?? null, null],
+      // Nilai yang sudah diinput dosen lewat portal dosen (urut: Pembimbing I, II, Penguji I, II).
+      nilai: pendaftar ? await nilaiSidangService.getRekap(pendaftar) : { perPeran: [null, null, null, null], nilaiAkhir: null },
+    };
+  }
+
   return {
     surat: {
       id: surat.id,
@@ -125,7 +171,10 @@ const getCetakData = async (id) => {
       tanggalLahir: biodata?.tanggalLahir ?? null,
       noKtp: biodata?.noKtp ?? null,
       alamat: composeAlamat(biodata),
+      hp: biodata?.hp ?? null,
     },
+    pembimbing,
+    sidang,
     jurusan: jurusan
       ? {
           namaJurusan: jurusan.namaJurusan,

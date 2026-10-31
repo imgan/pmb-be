@@ -32,4 +32,29 @@ const remove = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'Calon mahasiswa deleted' });
 });
 
-module.exports = { list, stats, detail, create, update, remove };
+const savePendidikan = catchAsync(async (req, res) => {
+  const data = await calonMahasiswaService.savePendidikan(req.params.id, req.body, req.user.id);
+  sendResponse(res, 200, { message: 'Data pendidikan disimpan', data });
+});
+
+const saveSumberInformasi = catchAsync(async (req, res) => {
+  const data = await calonMahasiswaService.saveSumberInformasi(req.params.id, req.body, req.user.id);
+  sendResponse(res, 200, { message: 'Sumber informasi disimpan', data });
+});
+
+const kunciSumber = catchAsync(async (req, res) => {
+  const data = await calonMahasiswaService.setKunciSumber(req.params.id, req.body.terkunci, req.user.id);
+  sendResponse(res, 200, { message: req.body.terkunci ? 'Data sumber informasi dikunci' : 'Kunci data sumber informasi dibuka', data });
+});
+
+const saveDataPmb = catchAsync(async (req, res) => {
+  const data = await calonMahasiswaService.saveDataPmb(req.params.id, req.body, req.user.id);
+  sendResponse(res, 200, { message: 'Data pendaftaran disimpan', data });
+});
+
+const kunciDataPmb = catchAsync(async (req, res) => {
+  const data = await calonMahasiswaService.setKunciDataPmb(req.params.id, req.body.terkunci, req.user.id);
+  sendResponse(res, 200, { message: req.body.terkunci ? 'Data pendaftaran dikunci' : 'Kunci data pendaftaran dibuka', data });
+});
+
+module.exports = { list, stats, detail, create, update, remove, savePendidikan, saveSumberInformasi, kunciSumber, saveDataPmb, kunciDataPmb };

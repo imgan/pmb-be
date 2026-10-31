@@ -22,7 +22,7 @@ const listPerpanjangan = async (query) => {
         model: Mahasiswa,
         as: 'mahasiswa',
         required: true,
-        where: Object.keys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
+        where: Reflect.ownKeys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
         include: [{ model: Jurusan, as: 'jurusan' }],
       },
     ],

@@ -2,6 +2,7 @@ const Joi = require('joi');
 
 const createTarifTaSkripsi = Joi.object({
   periode: Joi.number().integer().required(),
+  tahunAjaranId: Joi.number().integer().required(),
   jurusanId: Joi.number().integer().required(),
   biayaPendaftaran: Joi.number().min(0).required(),
   biayaPerpanjangan: Joi.number().min(0),
@@ -10,6 +11,7 @@ const createTarifTaSkripsi = Joi.object({
 
 const updateTarifTaSkripsi = Joi.object({
   periode: Joi.number().integer(),
+  tahunAjaranId: Joi.number().integer().allow(null),
   jurusanId: Joi.number().integer(),
   biayaPendaftaran: Joi.number().min(0),
   biayaPerpanjangan: Joi.number().min(0),

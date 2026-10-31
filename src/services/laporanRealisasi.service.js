@@ -35,6 +35,7 @@ const listRealisasi = async (query) => {
       { kelas: { [Op.like]: `%${query.search}%` } },
       { kodeMataKuliah: { [Op.like]: `%${query.search}%` } },
       { namaMataKuliah: { [Op.like]: `%${query.search}%` } },
+      { '$dosenKordinator.nama_lengkap$': { [Op.like]: `%${query.search}%` } },
     ];
   }
 

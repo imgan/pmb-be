@@ -1,74 +1,77 @@
 const { Op } = require('sequelize');
-const { Kurikulum, KonversiKurikulum } = require('../models');
+const { Kurikulum, MataKuliah, KonversiKurikulum, Jurusan } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 /**
- * "Kurikulum" sebagai satu paket/versi = kombinasi (jurusanId, tahunAjaranId) pada tabel
- * Kurikulum. Dropdown Dari/Ke Kurikulum di FE menawarkan tiap kombinasi unik yang ada;
- * label (nama jurusan/tahun ajaran) diresolve di FE dari data yang sudah dimuat, supaya
- * query di sini tetap sederhana (hindari GROUP BY yang digabung dengan kolom hasil JOIN).
+ * Konversi kurikulum: memetakan tiap mata kuliah kurikulum lama (dari) ke padanannya di kurikulum
+ * baru (ke). Dropdown Dari/Ke Kurikulum di FE = daftar kurikulum (header).
  */
 const getFilterOptions = async () => {
   const rows = await Kurikulum.findAll({
-    attributes: ['jurusanId', 'tahunAjaranId'],
-    where: { jurusanId: { [Op.ne]: null }, tahunAjaranId: { [Op.ne]: null } },
-    group: ['jurusan_id', 'tahun_ajaran_id'],
-    raw: true,
+    include: [{ model: Jurusan, as: 'jurusan', attributes: ['id', 'namaJurusan'], required: false }],
+    order: [['tahunKurikulum', 'DESC'], ['nama', 'ASC']],
   });
-  return rows.map((r) => ({ jurusanId: r.jurusanId, tahunAjaranId: r.tahunAjaranId }));
+  return rows.map((k) => ({
+    value: k.id,
+    label: k.nama,
+    jurusanId: k.jurusanId,
+    prodi: k.jurusan?.namaJurusan ?? null,
+    tahunKurikulum: k.tahunKurikulum,
+  }));
 };
 
 const listKonversi = async (query) => {
-  const { dariJurusanId, dariTahunAjaranId, keJurusanId, keTahunAjaranId } = query;
-  if (!dariJurusanId || !dariTahunAjaranId) throw new ApiError(400, 'Dari Kurikulum wajib dipilih');
+  const { dariKurikulumId, keKurikulumId } = query;
+  if (!dariKurikulumId) throw new ApiError(400, 'Dari Kurikulum wajib dipilih');
 
-  const dariRows = await Kurikulum.findAll({
-    where: { jurusanId: dariJurusanId, tahunAjaranId: dariTahunAjaranId },
-    order: [
-      ['semester', 'ASC'],
-      ['mataKuliah', 'ASC'],
-    ],
+  const dariRows = await MataKuliah.findAll({
+    where: { kurikulumId: dariKurikulumId },
+    order: [['semester', 'ASC'], ['mataKuliah', 'ASC']],
   });
-
-  const keOptions =
-    keJurusanId && keTahunAjaranId
-      ? await Kurikulum.findAll({
-          where: { jurusanId: keJurusanId, tahunAjaranId: keTahunAjaranId },
-          order: [['mataKuliah', 'ASC']],
-        })
-      : [];
+  const keOptions = keKurikulumId ? await MataKuliah.findAll({ where: { kurikulumId: keKurikulumId }, order: [['mataKuliah', 'ASC']] }) : [];
 
   const dariIds = dariRows.map((r) => r.id);
   const existing = dariIds.length
     ? await KonversiKurikulum.findAll({
-        where: { dariKurikulumId: { [Op.in]: dariIds } },
-        include: [{ model: Kurikulum, as: 'keKurikulum', required: false }],
+        where: { dariMataKuliahId: { [Op.in]: dariIds } },
+        include: [{ model: MataKuliah, as: 'keMataKuliah', required: false }],
       })
     : [];
-  const existingByDariId = new Map(existing.map((e) => [e.dariKurikulumId, e]));
+  const existingByDariId = new Map(existing.map((e) => [e.dariMataKuliahId, e]));
 
   const rows = dariRows.map((dari) => {
     const mapping = existingByDariId.get(dari.id);
     return {
-      dariKurikulum: dari,
-      keKurikulumId: mapping?.keKurikulumId ?? null,
-      keKurikulum: mapping?.keKurikulum ?? null,
+      dariMataKuliah: dari,
+      keMataKuliahId: mapping?.keMataKuliahId ?? null,
+      keMataKuliah: mapping?.keMataKuliah ?? null,
     };
   });
-
   return { rows, keOptions };
 };
 
 const saveKonversi = async (payload, actorId) => {
-  const { dariKurikulumId, keKurikulumId } = payload;
-  const dari = await Kurikulum.findByPk(dariKurikulumId);
-  if (!dari) throw new ApiError(404, 'Mata kuliah (Dari Kurikulum) tidak ditemukan');
+  const { dariMataKuliahId, keMataKuliahId } = payload;
+  const dari = await MataKuliah.findByPk(dariMataKuliahId);
+  if (!dari) throw new ApiError(404, 'Mata kuliah asal tidak ditemukan');
+
+  // "Batal" di FE mengirim keMataKuliahId null -> pemetaan dihapus, mata kuliah kembali tanpa konversi.
+  if (!keMataKuliahId) {
+    await KonversiKurikulum.destroy({ where: { dariMataKuliahId } });
+    return null;
+  }
+  if (Number(keMataKuliahId) === Number(dariMataKuliahId)) {
+    throw new ApiError(400, 'Mata kuliah tujuan tidak boleh sama dengan mata kuliah asal');
+  }
+  const ke = await MataKuliah.findByPk(keMataKuliahId);
+  if (!ke) throw new ApiError(404, 'Mata kuliah tujuan tidak ditemukan');
+  if (ke.kurikulumId === dari.kurikulumId) throw new ApiError(400, 'Mata kuliah tujuan harus dari kurikulum lain');
 
   const [item] = await KonversiKurikulum.findOrCreate({
-    where: { dariKurikulumId },
-    defaults: { dariKurikulumId, keKurikulumId, createdBy: actorId, updatedBy: actorId },
+    where: { dariMataKuliahId },
+    defaults: { dariMataKuliahId, keMataKuliahId, createdBy: actorId, updatedBy: actorId },
   });
-  await item.update({ keKurikulumId, updatedBy: actorId });
+  await item.update({ keMataKuliahId, updatedBy: actorId });
   return item;
 };
 

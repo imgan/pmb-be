@@ -10,6 +10,7 @@ const updateKampus = Joi.object({
   facebookUrl: Joi.string().uri().max(255).allow('', null),
   instagramUrl: Joi.string().uri().max(255).allow('', null),
   youtubeUrl: Joi.string().uri().max(255).allow('', null),
+  tiktokUrl: Joi.string().uri().max(255).allow('', null),
   logoUrl: Joi.string().allow('', null),
   faviconUrl: Joi.string().allow('', null),
   websiteTitle: Joi.string().max(150).allow('', null),

@@ -44,7 +44,8 @@ router.use(authenticate);
  *       201:
  *         description: Tahun ajaran created
  */
-router.get('/', authorize(MENU.TAHUN_AJARAN_MANAGEMENT, ACTION.READ), tahunAjaranController.list);
+// Daftar tahun ajaran = data referensi dropdown di banyak modul (Prodi, Keuangan, dst), jadi cukup login.
+router.get('/', tahunAjaranController.list);
 router.post(
   '/',
   authorize(MENU.TAHUN_AJARAN_MANAGEMENT, ACTION.CREATE),

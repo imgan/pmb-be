@@ -5,10 +5,12 @@ const {
   PembayaranWisuda,
   PerpanjanganTaSkripsi,
   TagihanKuliah,
+  TahunAjaran,
   TunggakanMahasiswa,
   Mahasiswa,
   User,
 } = require('../models');
+const { ringkasanKewajibanMahasiswa } = require('../utils/tagihanSaldo');
 
 // Pakai komponen tanggal LOKAL (bukan toISOString, yang konversi ke UTC dan bisa geser 1 hari
 // di WIB/UTC+7) supaya konsisten dengan kolom DATEONLY `tanggalBayar` yang bersifat tanpa-zona.
@@ -95,15 +97,19 @@ const fetchTransaksi = async (rangeStart) => {
 
 const getTotalTunggakan = async () => {
   const tagihanList = await TagihanKuliah.findAll({
-    include: [{ model: PembayaranKuliah, as: 'pembayaranList' }],
+    include: [
+      { model: PembayaranKuliah, as: 'pembayaranList' },
+      { model: TahunAjaran, as: 'tahunAjaran', attributes: ['id', 'nama', 'tahunMulai', 'jenisSemester'], required: false },
+    ],
   });
   const mahasiswaMenunggak = new Set();
   let sisaTagihanTotal = 0;
-  tagihanList.forEach((tagihan) => {
-    const dibayar = (tagihan.pembayaranList ?? []).reduce((sum, p) => sum + p.nominal, 0);
-    const sisa = Math.max(tagihan.totalTagihan - dibayar, 0);
-    sisaTagihanTotal += sisa;
-    if (sisa > 0) mahasiswaMenunggak.add(tagihan.mahasiswaId);
+  const byMahasiswa = new Map();
+  tagihanList.forEach((t) => byMahasiswa.set(t.mahasiswaId, [...(byMahasiswa.get(t.mahasiswaId) ?? []), t]));
+  byMahasiswa.forEach((list, mahasiswaId) => {
+    const { totalKewajiban } = ringkasanKewajibanMahasiswa(list);
+    sisaTagihanTotal += totalKewajiban;
+    if (totalKewajiban > 0) mahasiswaMenunggak.add(mahasiswaId);
   });
 
   const manualList = await TunggakanMahasiswa.findAll();

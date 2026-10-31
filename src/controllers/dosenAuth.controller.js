@@ -12,4 +12,14 @@ const me = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'Profile fetched', data });
 });
 
-module.exports = { login, me };
+const updatePhoto = catchAsync(async (req, res) => {
+  const data = await dosenAuthService.updatePhoto(req.dosen.id, req.body.photo);
+  sendResponse(res, 200, { message: 'Foto profil diperbarui', data });
+});
+
+const changePassword = catchAsync(async (req, res) => {
+  await dosenAuthService.changePassword(req.dosen.id, req.body.oldPassword, req.body.newPassword);
+  sendResponse(res, 200, { message: 'Password berhasil diubah' });
+});
+
+module.exports = { login, me, updatePhoto, changePassword };

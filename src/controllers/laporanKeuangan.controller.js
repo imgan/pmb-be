@@ -2,12 +2,16 @@ const catchAsync = require('../utils/catchAsync');
 const sendResponse = require('../utils/ApiResponse');
 const { sendWorkbook } = require('../utils/excel');
 const service = require('../services/laporanKeuangan.service');
+const ApiError = require('../utils/ApiError');
+const kampusService = require('../services/kampus.service');
+const { getBebasTunggakanData, buildBebasTunggakanPdf } = require('../services/bebasTunggakanPdf.service');
 const pembayaranTaSkripsiService = require('../services/pembayaranTaSkripsi.service');
 const pembayaranLainService = require('../services/pembayaranLain.service');
 
 const tunggakanMahasiswa = catchAsync(async (req, res) => {
   const data = await service.listTunggakanMahasiswa({
     tahunAjaranId: req.query.tahunAjaranId ? Number(req.query.tahunAjaranId) : undefined,
+    kodeProdi: req.query.kodeProdi || undefined,
   });
   sendResponse(res, 200, { message: 'Laporan tunggakan mahasiswa fetched', data });
 });
@@ -17,6 +21,18 @@ const bebasTunggakan = catchAsync(async (req, res) => {
     tahunAjaranId: req.query.tahunAjaranId ? Number(req.query.tahunAjaranId) : undefined,
   });
   sendResponse(res, 200, { message: 'Laporan bebas tunggakan fetched', data });
+});
+
+// Bukti bebas tunggakan (lampiran sidang). Ditolak bila mahasiswa masih punya tunggakan.
+const bebasTunggakanPdf = catchAsync(async (req, res) => {
+  const [data, kampus] = await Promise.all([getBebasTunggakanData(Number(req.params.mahasiswaId)), kampusService.getKampus()]);
+  if (data.tunggakan > 0) {
+    throw new ApiError(400, `${data.mahasiswa.namaLengkap} masih memiliki tunggakan Rp ${Math.round(data.tunggakan).toLocaleString('id-ID')}`);
+  }
+  const doc = buildBebasTunggakanPdf(data, kampus, { petugas: req.user.name });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="bebas-tunggakan-${data.mahasiswa.nim}.pdf"`);
+  doc.pipe(res);
 });
 
 const uangKuliah = catchAsync(async (req, res) => {
@@ -62,6 +78,7 @@ const tunggakanBiayaLain = catchAsync(async (req, res) => {
 const exportTunggakanPerMahasiswa = catchAsync(async (req, res) => {
   const workbook = await service.exportTunggakanPerMahasiswa({
     tahunAjaranId: req.query.tahunAjaranId ? Number(req.query.tahunAjaranId) : undefined,
+    kodeProdi: req.query.kodeProdi || undefined,
   });
   await sendWorkbook(res, workbook, 'tunggakan-per-mahasiswa.xlsx');
 });
@@ -69,6 +86,7 @@ const exportTunggakanPerMahasiswa = catchAsync(async (req, res) => {
 const exportTunggakanPerJurusan = catchAsync(async (req, res) => {
   const workbook = await service.exportTunggakanPerJurusan({
     tahunAjaranId: req.query.tahunAjaranId ? Number(req.query.tahunAjaranId) : undefined,
+    kodeProdi: req.query.kodeProdi || undefined,
   });
   await sendWorkbook(res, workbook, 'tunggakan-per-jurusan.xlsx');
 });
@@ -76,6 +94,7 @@ const exportTunggakanPerJurusan = catchAsync(async (req, res) => {
 module.exports = {
   tunggakanMahasiswa,
   bebasTunggakan,
+  bebasTunggakanPdf,
   uangKuliah,
   tunggakan,
   exportTunggakan,

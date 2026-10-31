@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const { DaftarPotongan, Mahasiswa } = require('../models');
+const { syncPotonganTagihan } = require('../utils/potonganTagihan');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
@@ -75,12 +76,14 @@ const createDaftarPotongan = async (payload, actorId) => {
   const { nim, ...rest } = payload;
   const mahasiswaId = await resolveMahasiswaId(nim);
   const item = await DaftarPotongan.create({ ...rest, mahasiswaId, createdBy: actorId, updatedBy: actorId });
+  await syncPotonganTagihan([mahasiswaId]);
   return getDaftarPotonganById(item.id);
 };
 
 const deleteDaftarPotongan = async (id) => {
   const item = await getDaftarPotonganById(id);
   await item.destroy();
+  await syncPotonganTagihan([item.mahasiswaId]);
 };
 
 const exportDaftarPotongan = async () => {
@@ -117,6 +120,7 @@ const importDaftarPotongan = async (fileBase64, actorId) => {
   const rows = await parseWorkbookFromBase64(fileBase64);
   const errors = [];
   let successCount = 0;
+  const mahasiswaIds = [];
 
   for (const { rowNumber, data } of rows) {
     const nim = cellString(data['NIM']);
@@ -149,10 +153,12 @@ const importDaftarPotongan = async (fileBase64, actorId) => {
         updatedBy: actorId,
       });
       successCount += 1;
+      mahasiswaIds.push(mahasiswa.id);
     } catch (err) {
       errors.push({ row: rowNumber, message: err.message });
     }
   }
+  await syncPotonganTagihan(mahasiswaIds);
 
   return { successCount, errorCount: errors.length, errors };
 };

@@ -32,10 +32,10 @@ module.exports = {
 
     await queryInterface.bulkInsert('beasiswa', [
       {
-        nama_beasiswa: 'Beasiswa Pemkot Cilegon (KCS)',
+        nama_beasiswa: 'Beasiswa Pemkot Bekasi (KCS)',
         slug: 'kcs',
         ringkasan:
-          'Bantuan biaya pendidikan dari Pemkot Cilegon bagi lulusan SMA/sederajat berprestasi dengan keterbatasan ekonomi.',
+          'Bantuan biaya pendidikan dari Pemkot Bekasi bagi lulusan SMA/sederajat berprestasi dengan keterbatasan ekonomi.',
         konten,
         order_number: 2,
         is_active: true,

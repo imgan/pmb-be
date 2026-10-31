@@ -3,7 +3,7 @@ const krsController = require('../controllers/krs.controller');
 const authenticate = require('../middlewares/auth.middleware');
 const authorize = require('../middlewares/permission.middleware');
 const validate = require('../middlewares/validate.middleware');
-const { createKrs, updateKrs } = require('../validations/krs.validation');
+const { createKrs, updateKrs, setujuiMassal } = require('../validations/krs.validation');
 const MENU = require('../constants/menuCodes');
 const ACTION = require('../constants/actions');
 
@@ -37,7 +37,14 @@ router.use(authenticate);
  *       201:
  *         description: KRS created
  */
-const LIST_CODES = [MENU.KRS_MANAGEMENT, MENU.PRODI_MONITORING_FRS_MANAGEMENT];
+// Masa Studi (Prodi & BAAK) menampilkan riwayat KRS per semester di popup aktifitas mahasiswa.
+const LIST_CODES = [
+  MENU.KRS_MANAGEMENT,
+  MENU.PRODI_KRS_MANAGEMENT,
+  MENU.PRODI_MONITORING_FRS_MANAGEMENT,
+  MENU.PRODI_HABIS_MASA_STUDI_MANAGEMENT,
+  MENU.BAAK_MASA_STUDI_MANAGEMENT,
+];
 
 router.get('/', authorize(LIST_CODES, ACTION.READ), krsController.list);
 router.post('/', authorize(MENU.KRS_MANAGEMENT, ACTION.CREATE), validate(createKrs), krsController.create);
@@ -63,6 +70,25 @@ router.post('/', authorize(MENU.KRS_MANAGEMENT, ACTION.CREATE), validate(createK
  *         description: Kuota SKS (null maxSks berarti belum ada riwayat nilai / tidak dibatasi)
  */
 router.get('/kuota', authorize(MENU.KRS_MANAGEMENT, ACTION.READ), krsController.kuota);
+// Cetak PDF sesuai filter halaman KRS Mahasiswa.
+router.get('/cetak', authorize(MENU.KRS_MANAGEMENT, ACTION.READ), krsController.cetak);
+
+/**
+ * @swagger
+ * /krs/setujui-massal:
+ *   post:
+ *     summary: Setujui banyak KRS sekaligus (hak prerogatif BAAK)
+ *     tags: [Krs]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema: { type: object, properties: { ids: { type: array, items: { type: integer } } } }
+ *     responses:
+ *       200:
+ *         description: Jumlah KRS disetujui + daftar yang dilewati beserta alasannya
+ */
+router.post('/setujui-massal', authorize(MENU.KRS_MANAGEMENT, ACTION.UPDATE), validate(setujuiMassal), krsController.setujuiMassal);
 
 /**
  * @swagger

@@ -2,6 +2,7 @@ const { Op } = require('sequelize');
 const { Mahasiswa, Jurusan, GolonganKelas, TahunAjaran, NilaiMahasiswa } = require('../models');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { GRADE_BOBOT } = require('../utils/gradeScale');
+const { loadKelompokKode, pilihNilaiEfektif } = require('../utils/ekuivalensiMatkul');
 const { resolveSemesterMahasiswa, maxSemesterWajarForJenjang, masaStudiNormalForJenjang } = require('../utils/hitungSemester');
 
 /**
@@ -56,11 +57,17 @@ const listEvaluasiStudi = async (query = {}) => {
   });
   if (!mahasiswaList.length) return { data: [], meta: getPagingMeta(0, page, limit) };
 
-  const nilaiList = await NilaiMahasiswa.findAll({
-    attributes: ['mahasiswaId', 'sks', 'grade'],
-    where: { mahasiswaId: mahasiswaList.map((m) => m.id) },
-    raw: true,
-  });
+  const [nilaiSemua, kelompokOf] = await Promise.all([
+    NilaiMahasiswa.findAll({
+      attributes: ['mahasiswaId', 'kodeMataKuliah', 'semester', 'sks', 'grade'],
+      where: { mahasiswaId: mahasiswaList.map((m) => m.id) },
+      raw: true,
+    }),
+    loadKelompokKode(),
+  ]);
+  // SKS & IPK evaluasi memakai nilai yang diakui saja — mata kuliah yang diulang (termasuk lewat
+  // konversi kurikulum) tidak terhitung dua kali.
+  const nilaiList = pilihNilaiEfektif(nilaiSemua, kelompokOf);
   const nilaiByMahasiswa = new Map();
   nilaiList.forEach((n) => {
     const list = nilaiByMahasiswa.get(n.mahasiswaId) ?? [];

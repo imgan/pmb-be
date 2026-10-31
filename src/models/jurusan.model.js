@@ -6,6 +6,8 @@ module.exports = (sequelize, DataTypes) => {
       golonganKelasId: { type: DataTypes.INTEGER, allowNull: false },
       namaJurusan: { type: DataTypes.STRING(150), allowNull: false },
       kodeProdi: { type: DataTypes.STRING(20), allowNull: true },
+      // Singkatan prodi untuk nama kelas (Generate NIM), mis. TI → TI1AP.
+      singkatan: { type: DataTypes.STRING(5), allowNull: true },
       foto: { type: DataTypes.TEXT('long'), allowNull: true },
       prospekKarir: { type: DataTypes.TEXT, allowNull: true },
       jenjangPendidikan: { type: DataTypes.STRING(50), allowNull: true },

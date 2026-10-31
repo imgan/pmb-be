@@ -27,4 +27,15 @@ const remove = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'Pembimbing akademik deleted' });
 });
 
-module.exports = { list, detail, create, update, remove };
+const listMahasiswa = catchAsync(async (req, res) => {
+  const data = await pembimbingAkademikService.listMahasiswaBimbingan(Number(req.params.id), req.query);
+  sendResponse(res, 200, { message: 'Mahasiswa bimbingan fetched', data });
+});
+
+// req.query.jurusanId diisi middleware prodiScope untuk akun Prodi (terkunci ke prodinya).
+const setMahasiswa = catchAsync(async (req, res) => {
+  const data = await pembimbingAkademikService.setMahasiswaBimbingan(Number(req.params.id), req.body, req.user.id, req.query.jurusanId);
+  sendResponse(res, 200, { message: 'Mahasiswa bimbingan disimpan', data });
+});
+
+module.exports = { list, detail, create, update, remove, listMahasiswa, setMahasiswa };

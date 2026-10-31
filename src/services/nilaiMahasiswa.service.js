@@ -35,6 +35,7 @@ const searchMahasiswa = async (query) => {
     namaLengkap: m.namaLengkap,
     kelas: kelasLabel(m),
     programStudi: m.jurusan?.namaJurusan ?? null,
+    angkatan: m.tahunMasuk,
   }));
 
   return { data, meta: getPagingMeta(count, page, limit) };
@@ -132,7 +133,7 @@ const searchNilaiEntries = async (query) => {
         model: Mahasiswa,
         as: 'mahasiswa',
         attributes: ['id', 'nim', 'namaLengkap'],
-        where: Object.keys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
+        where: Reflect.ownKeys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
         required: true,
       },
     ],
@@ -181,6 +182,7 @@ const getSemesterSummary = async () => {
 };
 
 module.exports = {
+  computeNilai,
   searchMahasiswa,
   getNilaiByMahasiswa,
   getSemesterSummary,

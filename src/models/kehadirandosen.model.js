@@ -12,6 +12,8 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 'HADIR',
       },
       keterangan: { type: DataTypes.TEXT, allowNull: true },
+      // Uraian materi/pokok bahasan pertemuan ini.
+      uraian: { type: DataTypes.TEXT, allowNull: true },
       // Diisi oleh dosen sendiri saat menginput realisasi mengajar lewat portal Dosen.
       jamMasuk: { type: DataTypes.TIME, allowNull: true },
       jamKeluar: { type: DataTypes.TIME, allowNull: true },

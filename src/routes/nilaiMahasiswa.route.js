@@ -3,7 +3,7 @@ const nilaiMahasiswaController = require('../controllers/nilaiMahasiswa.controll
 const authenticate = require('../middlewares/auth.middleware');
 const authorize = require('../middlewares/permission.middleware');
 const validate = require('../middlewares/validate.middleware');
-const { updateNilaiEntry } = require('../validations/nilaiMahasiswa.validation');
+const { updateNilaiEntry, importNilai } = require('../validations/nilaiMahasiswa.validation');
 const MENU = require('../constants/menuCodes');
 const ACTION = require('../constants/actions');
 
@@ -104,6 +104,11 @@ router.get(
  *       404:
  *         description: Data nilai not found
  */
+// Import nilai (format "Nilai" PDDikti Feeder) — BAAK Monitoring Nilai / Prodi Update Nilai.
+const IMPORT_CODES = [MENU.NILAI_MONITORING_MANAGEMENT, MENU.PRODI_UPDATE_NILAI_MANAGEMENT];
+router.get('/import-template', authorize(IMPORT_CODES, ACTION.READ), nilaiMahasiswaController.importTemplate);
+router.post('/import', authorize(IMPORT_CODES, ACTION.CREATE), validate(importNilai), nilaiMahasiswaController.importExcel);
+
 router.put(
   '/entries/:id',
   authorize(MENU.PRODI_UPDATE_NILAI_MANAGEMENT, ACTION.UPDATE),

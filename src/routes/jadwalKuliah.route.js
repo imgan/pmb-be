@@ -49,13 +49,16 @@ const READ_CODES = [
   MENU.MASTER_MONITORING_MANAGEMENT,
   MENU.LAPORAN_CETAK_KEHADIRAN_MENGAJAR_MANAGEMENT,
   MENU.PRODI_JADWAL_KULIAH_MANAGEMENT,
+  MENU.PRODI_MONITORING_JADWAL_MANAGEMENT,
 ];
-const WRITE_CODES = [MENU.JADWAL_KULIAH_MANAGEMENT, MENU.PRODI_JADWAL_KULIAH_MANAGEMENT];
+// Tambah, import, dan hapus hanya dari modul BAAK; prodi cukup mengubah jadwal yang dibuat BAAK.
+const MANAGE_CODES = [MENU.JADWAL_KULIAH_MANAGEMENT];
+const UPDATE_CODES = [MENU.JADWAL_KULIAH_MANAGEMENT, MENU.PRODI_JADWAL_KULIAH_MANAGEMENT];
 
 router.get('/', authorize(READ_CODES, ACTION.READ), jadwalKuliahController.list);
 router.post(
   '/',
-  authorize(WRITE_CODES, ACTION.CREATE),
+  authorize(MANAGE_CODES, ACTION.CREATE),
   validate(createJadwalKuliah),
   jadwalKuliahController.create
 );
@@ -72,6 +75,10 @@ router.post(
  *         description: List of kelas
  */
 router.get('/kelas-options', authorize(READ_CODES, ACTION.READ), jadwalKuliahController.kelasOptions);
+// Pilihan ruangan form jadwal = Master Ruangan (Modul Admin).
+router.get('/ruangan-options', authorize(READ_CODES, ACTION.READ), jadwalKuliahController.ruanganOptions);
+// Pilihan mata kuliah form jadwal = Matakuliah Aktif pada tahun akademik terpilih.
+router.get('/matakuliah-options', authorize(READ_CODES, ACTION.READ), jadwalKuliahController.matakuliahOptions);
 
 /**
  * @swagger
@@ -85,6 +92,23 @@ router.get('/kelas-options', authorize(READ_CODES, ACTION.READ), jadwalKuliahCon
  *         description: File Excel jadwal kuliah
  */
 router.get('/export', authorize(READ_CODES, ACTION.READ), jadwalKuliahController.exportExcel);
+
+/**
+ * @swagger
+ * /jadwal-kuliah/export-v2:
+ *   get:
+ *     summary: Export jadwal kuliah satu prodi + semester ke Excel format cetak prodi (judul, per hari, SKS T/P, tanda tangan Kaprodi)
+ *     tags: [JadwalKuliah]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: kodeProdi, required: true, schema: { type: string } }
+ *       - { in: query, name: semester, required: true, schema: { type: integer } }
+ *       - { in: query, name: tahunAjaranId, schema: { type: integer }, description: Default tahun ajaran aktif }
+ *     responses:
+ *       200:
+ *         description: File Excel jadwal kuliah (satu sheet per kelas)
+ */
+router.get('/export-v2', authorize(READ_CODES, ACTION.READ), jadwalKuliahController.exportExcelV2);
 
 /**
  * @swagger
@@ -123,7 +147,7 @@ router.get('/import-template', authorize(READ_CODES, ACTION.READ), jadwalKuliahC
  */
 router.post(
   '/import',
-  authorize(WRITE_CODES, ACTION.CREATE),
+  authorize(MANAGE_CODES, ACTION.CREATE),
   validate(importJadwalKuliah),
   jadwalKuliahController.importExcel
 );
@@ -167,13 +191,14 @@ router.post(
  *       200:
  *         description: Jadwal kuliah deleted
  */
+router.get('/:id/peserta', authorize(READ_CODES, ACTION.READ), jadwalKuliahController.peserta);
 router.get('/:id', authorize(READ_CODES, ACTION.READ), jadwalKuliahController.detail);
 router.put(
   '/:id',
-  authorize(WRITE_CODES, ACTION.UPDATE),
+  authorize(UPDATE_CODES, ACTION.UPDATE),
   validate(updateJadwalKuliah),
   jadwalKuliahController.update
 );
-router.delete('/:id', authorize(WRITE_CODES, ACTION.DELETE), jadwalKuliahController.remove);
+router.delete('/:id', authorize(MANAGE_CODES, ACTION.DELETE), jadwalKuliahController.remove);
 
 module.exports = router;

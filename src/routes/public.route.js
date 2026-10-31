@@ -33,6 +33,7 @@ router.get('/golongan-kelas', publicController.listGolonganKelas);
  *         description: List of jurusan
  */
 router.get('/jurusan', publicController.listJurusan);
+router.get('/login-options', publicController.loginOptions);
 
 /**
  * @swagger
@@ -81,6 +82,8 @@ router.get('/kampus', publicController.kampus);
  *         description: List of beasiswa
  */
 router.get('/beasiswa', publicController.listBeasiswa);
+// Pilihan "tahu kampus dari mana" di form pendaftaran.
+router.get('/sumber-informasi', publicController.listSumberInformasi);
 
 /**
  * @swagger

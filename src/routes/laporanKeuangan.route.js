@@ -24,6 +24,12 @@ router.get(
   authorize(MENU.KEUANGAN_LAPORAN_BEBAS_TUNGGAKAN_MANAGEMENT, ACTION.READ),
   controller.bebasTunggakan
 );
+// Cetak bukti bebas tunggakan satu mahasiswa (PDF, lampiran sidang).
+router.get(
+  '/bebas-tunggakan/:mahasiswaId/pdf',
+  authorize(MENU.KEUANGAN_LAPORAN_BEBAS_TUNGGAKAN_MANAGEMENT, ACTION.READ),
+  controller.bebasTunggakanPdf
+);
 router.get(
   '/uang-kuliah',
   authorize(MENU.KEUANGAN_LAPORAN_UANG_KULIAH_MANAGEMENT, ACTION.READ),

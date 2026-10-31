@@ -29,6 +29,10 @@ const authenticateDosen = catchAsync(async (req, res, next) => {
   }
 
   req.dosen = dosen;
+  // Tahun akademik yang dipilih dosen di Profil → Setting Tahun Akademik (header X-Tahun-Ajaran-Id).
+  // null = tidak dipilih: daftar kelas tidak difilter & dashboard memakai tahun ajaran aktif.
+  const tahunAjaranId = Number(req.headers['x-tahun-ajaran-id']);
+  req.tahunAjaranId = Number.isInteger(tahunAjaranId) && tahunAjaranId > 0 ? tahunAjaranId : null;
   next();
 });
 

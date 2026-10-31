@@ -9,7 +9,7 @@ const createMenu = Joi.object({
   orderNumber: Joi.number().integer().default(0),
   isActive: Joi.boolean(),
   isPublic: Joi.boolean(),
-  module: Joi.string().valid('pmb', 'baak', 'sdi', 'prodi'),
+  module: Joi.string().valid('pmb', 'baak', 'sdi', 'prodi', 'keuangan', 'sim', 'admin', 'lms'),
 });
 
 const updateMenu = Joi.object({
@@ -21,7 +21,7 @@ const updateMenu = Joi.object({
   orderNumber: Joi.number().integer(),
   isActive: Joi.boolean(),
   isPublic: Joi.boolean(),
-  module: Joi.string().valid('pmb', 'baak', 'sdi', 'prodi'),
+  module: Joi.string().valid('pmb', 'baak', 'sdi', 'prodi', 'keuangan', 'sim', 'admin'),
 }).min(1);
 
 module.exports = { createMenu, updateMenu };

@@ -25,7 +25,7 @@ const listPembayaran = async (query) => {
         model: Mahasiswa,
         as: 'mahasiswa',
         required: true,
-        where: Object.keys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
+        where: Reflect.ownKeys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
         include: [{ model: Jurusan, as: 'jurusan' }],
       },
       { model: TarifLain, as: 'tarifLain' },
@@ -122,7 +122,7 @@ const deletePembayaran = async (id) => {
  * angkatan mahasiswa tsb), dihitung sekali untuk semua mahasiswa yang punya tarif biaya lain
  * berlaku — dipakai laporan Tunggakan Mahasiswa supaya tidak query per-mahasiswa satu-satu.
  */
-const buildSisaBiayaLainMap = async () => {
+const buildSisaBiayaLainMap = async ({ mahasiswaId } = {}) => {
   const tarifList = await TarifLain.findAll({ where: { isActive: true }, raw: true });
   if (!tarifList.length) return new Map();
 
@@ -132,8 +132,9 @@ const buildSisaBiayaLainMap = async () => {
     tarifByTahunMasuk.get(t.tahunMasuk).push(t);
   });
 
+  // mahasiswaId opsional: batasi hitungan ke satu mahasiswa (cek batas tagihan di portal mahasiswa).
   const mahasiswaList = await Mahasiswa.findAll({
-    where: { tahunMasuk: [...tarifByTahunMasuk.keys()] },
+    where: { tahunMasuk: [...tarifByTahunMasuk.keys()], ...(mahasiswaId ? { id: mahasiswaId } : {}) },
     attributes: ['id', 'tahunMasuk'],
     raw: true,
   });

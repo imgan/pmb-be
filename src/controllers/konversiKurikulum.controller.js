@@ -14,7 +14,10 @@ const list = catchAsync(async (req, res) => {
 
 const save = catchAsync(async (req, res) => {
   const data = await konversiKurikulumService.saveKonversi(req.body, req.user.id);
-  sendResponse(res, 200, { message: 'Konversi kurikulum berhasil disimpan', data });
+  sendResponse(res, 200, {
+    message: data ? 'Konversi kurikulum berhasil disimpan' : 'Konversi kurikulum dibatalkan',
+    data,
+  });
 });
 
 module.exports = { filterOptions, list, save };

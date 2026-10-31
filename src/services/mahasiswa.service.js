@@ -1,6 +1,8 @@
+const bcrypt = require('bcryptjs');
 const { Op } = require('sequelize');
 const { Mahasiswa, MahasiswaBiodata, Peserta, GolonganKelas, Jurusan, TahunAjaran, sequelize } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { kontakMahasiswaDariBiodata } = require('../utils/biodataKontak');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
 const { buildWorkbook, parseWorkbookFromBase64, cellString } = require('../utils/excel');
@@ -84,6 +86,15 @@ const updateMahasiswa = async (id, payload, actorId) => {
   return getMahasiswaById(id);
 };
 
+/** Reset password portal mahasiswa ke NIM-nya (untuk mahasiswa yang lupa password). */
+const resetPasswordMahasiswa = async (id) => {
+  const mahasiswa = await Mahasiswa.findByPk(id);
+  if (!mahasiswa) throw new ApiError(404, 'Mahasiswa not found');
+  if (!mahasiswa.nim) throw new ApiError(400, 'Mahasiswa belum punya NIM');
+  await mahasiswa.update({ password: await bcrypt.hash(mahasiswa.nim, 10) });
+  return { nim: mahasiswa.nim, namaLengkap: mahasiswa.namaLengkap };
+};
+
 const deleteMahasiswa = async (id) => {
   const mahasiswa = await Mahasiswa.findByPk(id);
   if (!mahasiswa) throw new ApiError(404, 'Mahasiswa not found');
@@ -106,7 +117,7 @@ const saveBiodata = async (mahasiswaId, payload, actorId) => {
   } else {
     await MahasiswaBiodata.create({ ...payload, mahasiswaId });
   }
-  await mahasiswa.update({ updatedBy: actorId });
+  await mahasiswa.update({ ...kontakMahasiswaDariBiodata(payload), updatedBy: actorId });
 
   return MahasiswaBiodata.findOne({ where: { mahasiswaId } });
 };
@@ -269,12 +280,30 @@ const generateMahasiswaFromPeserta = async (payload, actorId) => {
 /**
  * Kolom import/export biodata mahasiswa mengikuti format Dapodik/PDDikti (biodata lengkap +
  * data orang tua/wali) yang dipakai untuk migrasi data dari sistem lama. NIM adalah kunci
- * pencocokan; "Kode Prodi" HANYA informasi (diambil dari Jurusan.kodeProdi), tidak diproses
- * saat import — jurusan mahasiswa tetap dikelola lewat menu Mahasiswa/Generate Mahasiswa.
+ * pencocokan; "Kode Prodi", "Prodi" dan "Angkatan" hanya dipakai saat NIM belum ada (mahasiswa baru)
+ * — prodi mahasiswa yang sudah ada tetap dikelola lewat menu Mahasiswa. "Kelas", "Status
+ * Masuk", "Asal Sekolah" dan "Alamat" adalah kolom tabel mahasiswa dan ikut diperbarui.
  */
+const STATUS_MASUK = ['BARU', 'TRANSFER_LUAR', 'TRANSFER_DALAM', 'TRANSFER_LUAR_KARYAWAN', 'TRANSFER_DALAM_KARYAWAN'];
+// Pilihan sama dengan form biodata (BAAK / Prodi).
+const PILIHAN_BIODATA = {
+  'Status Belajar': { key: 'statusBelajar', values: ['Non Shift', 'Shift'] },
+  'Status Kuliah': { key: 'statusKuliah', values: ['Baru', 'Lama', 'Pindahan'] },
+};
+const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+
 const EXPORT_COLUMNS = [
   { header: 'NIM', key: 'nim' },
   { header: 'Nama', key: 'nama' },
+  { header: 'Kelas', key: 'kelas' },
+  { header: 'Waktu Kuliah', key: 'waktuKuliah' },
+  { header: 'Status Belajar', key: 'statusBelajar' },
+  { header: 'Status Kuliah', key: 'statusKuliah' },
+  { header: 'Prodi', key: 'prodi' },
+  { header: 'Angkatan', key: 'angkatan' },
+  { header: 'Status Masuk', key: 'statusMasuk' },
+  { header: 'Asal Sekolah', key: 'asalSekolah' },
+  { header: 'Alamat', key: 'alamat' },
   { header: 'Tempat Lahir', key: 'tempatLahir' },
   { header: 'Tanggal Lahir', key: 'tanggalLahir' },
   { header: 'Jenis Kelamin', key: 'jenisKelamin' },
@@ -326,13 +355,26 @@ const EXPORT_COLUMNS = [
   { header: 'Program Studi Asal', key: 'programStudiAsal' },
 ];
 
-const exportMahasiswa = async () => {
-  const rows = await Mahasiswa.findAll({ include: includeRelationsWithBiodata, order: [['nim', 'ASC']] });
+/** `filters` opsional (Feeder Mahasiswa): kodeProdi & tahunMasuk. */
+const exportMahasiswa = async (filters = {}) => {
+  const where = {};
+  if (filters.tahunMasuk) where.tahunMasuk = Number(filters.tahunMasuk);
+  if (filters.kodeProdi) where['$jurusan.kode_prodi$'] = filters.kodeProdi;
+  const rows = await Mahasiswa.findAll({ where, include: includeRelationsWithBiodata, order: [['nim', 'ASC']] });
   const data = rows.map((m) => {
     const b = m.biodata;
     return {
       nim: m.nim,
       nama: m.namaLengkap,
+      kelas: m.golonganKelas?.namaKelas ?? '',
+      waktuKuliah: b?.waktuKuliah ?? '',
+      statusBelajar: b?.statusBelajar ?? '',
+      statusKuliah: b?.statusKuliah ?? '',
+      prodi: m.jurusan?.namaJurusan ?? '',
+      angkatan: m.tahunMasuk ?? '',
+      statusMasuk: m.statusMasuk ?? '',
+      asalSekolah: m.asalSekolah ?? '',
+      alamat: m.alamat ?? '',
       tempatLahir: b?.tempatLahir ?? '',
       tanggalLahir: b?.tanggalLahir ?? '',
       jenisKelamin: b?.jenisKelamin ?? '',
@@ -355,7 +397,7 @@ const exportMahasiswa = async () => {
       jenisTinggal: b?.jenisTinggal ?? '',
       alatTransportasi: b?.alatTransportasi ?? '',
       teleponRumah: b?.teleponRumah ?? '',
-      hp: b?.hp ?? '',
+      hp: b?.hp ?? m.noTelepon ?? '',
       email: b?.email ?? m.email,
       terimaKps: b?.terimaKps ?? '',
       noKps: b?.noKps ?? '',
@@ -391,6 +433,15 @@ const exportMahasiswaTemplate = () => {
   const sample = {
     nim: 'TI20260001',
     nama: 'Contoh Nama Mahasiswa',
+    kelas: 'Reguler',
+    waktuKuliah: 'Pagi',
+    statusBelajar: 'Non Shift',
+    statusKuliah: 'Baru',
+    prodi: '(informasi saja, tidak diproses saat import)',
+    angkatan: '(informasi saja, tidak diproses saat import)',
+    statusMasuk: 'BARU',
+    asalSekolah: 'SMA Negeri 1 Contoh',
+    alamat: 'Jl. Contoh No. 1, Kel. Contoh, Kec. Contoh, Kota Contoh',
     tempatLahir: 'Jakarta',
     tanggalLahir: '2005-01-15',
     jenisKelamin: 'L',
@@ -457,12 +508,13 @@ const cellDate = (value) => {
 };
 
 /**
- * Import hanya MENGUBAH data mahasiswa yang sudah ada (dicocokkan lewat NIM) — tidak membuat
- * mahasiswa baru, karena pembuatan mahasiswa baru wajib melalui alur generate dari peserta
- * lulus (butuh pesertaId yang tidak bisa disediakan lewat file Excel). Nama mahasiswa (kolom
- * "Nama") ikut diperbarui di tabel mahasiswa; sisanya (kolom biodata Dapodik/PDDikti) disimpan
- * ke MahasiswaBiodata — dibuat otomatis kalau baris biodatanya belum ada. "Kode Prodi" sengaja
- * diabaikan (lihat catatan di atas EXPORT_COLUMNS).
+ * Import dicocokkan lewat NIM:
+ * - NIM sudah ada -> data mahasiswa DIUBAH ("Kode Prodi"/"Prodi"/"Angkatan" diabaikan, lihat
+ *   catatan di atas EXPORT_COLUMNS);
+ * - NIM belum ada -> mahasiswa BARU dibuat tanpa data PMB (pesertaId null, seperti data migrasi).
+ *   Wajib: Nama, Email, Kode Prodi (atau Prodi) dan Angkatan; Kelas kosong = Reguler. Password
+ *   awal = NIM (sama dengan reset password).
+ * Kolom biodata Dapodik/PDDikti disimpan ke MahasiswaBiodata — dibuat otomatis bila belum ada.
  */
 const importMahasiswa = async (fileBase64, actorId) => {
   const rows = await parseWorkbookFromBase64(fileBase64);
@@ -474,6 +526,30 @@ const importMahasiswa = async (fileBase64, actorId) => {
     target[key] = cellString(payload[header]) || null;
   };
 
+  // Kelas boleh diisi nama golongan kelas ("Reguler", "Karyawan", ...) atau singkatan R/K.
+  const golonganList = await GolonganKelas.findAll();
+  const findGolongan = (raw) => {
+    const s = raw.trim().toLowerCase();
+    const byNama = golonganList.find((g) => g.namaKelas.toLowerCase() === s);
+    if (byNama) return byNama;
+    // "R", "K", "K (Pindahan)" -> huruf pertama sebagai singkatan.
+    const singkatan = s.match(/^([rk])(\s*\(.*\))?$/)?.[1];
+    const alias = { r: 'reguler', k: 'karyawan' }[singkatan];
+    return alias ? golonganList.find((g) => g.namaKelas.toLowerCase() === alias) : null;
+  };
+
+  // Prodi akademik = jurusan id terkecil per kode prodi (baris lain = varian golongan kelas PMB).
+  const jurusanList = await Jurusan.findAll({ attributes: ['id', 'namaJurusan', 'kodeProdi'], order: [['id', 'ASC']] });
+  const findProdi = (kode, nama) => {
+    const k = kode.trim();
+    if (k) return jurusanList.find((j) => String(j.kodeProdi ?? '') === k) ?? null;
+    const n = nama.trim().toLowerCase();
+    const byNama = n && jurusanList.find((j) => j.namaJurusan.toLowerCase() === n);
+    return byNama ? (byNama.kodeProdi ? jurusanList.find((j) => j.kodeProdi === byNama.kodeProdi) : byNama) : null;
+  };
+  let createdCount = 0;
+  let updatedCount = 0;
+
   for (const { rowNumber, data } of rows) {
     const nim = cellString(data['NIM']);
     if (!nim) {
@@ -482,9 +558,32 @@ const importMahasiswa = async (fileBase64, actorId) => {
     }
 
     const mahasiswa = await Mahasiswa.findOne({ where: { nim } });
+    // NIM belum ada -> siapkan data mahasiswa baru (kolom wajib dicek di sini).
+    let baru = null;
     if (!mahasiswa) {
-      errors.push({ row: rowNumber, message: `Mahasiswa dengan NIM ${nim} tidak ditemukan` });
-      continue;
+      const kurang = [];
+      if (!cellString(data['Nama'])) kurang.push('Nama');
+      const emailBaru = cellString(data['Email']);
+      if (!emailBaru || !isEmail(emailBaru)) kurang.push('Email (valid)');
+      const kodeProdi = cellString(data['Kode Prodi']);
+      const namaProdi = cellString(data['Prodi']);
+      const prodi = findProdi(kodeProdi, namaProdi);
+      if (!kodeProdi && !namaProdi) kurang.push('Kode Prodi / Prodi');
+      const angkatan = cellNumber(data['Angkatan']);
+      if (!angkatan) kurang.push('Angkatan');
+      if (kurang.length) {
+        errors.push({ row: rowNumber, message: `NIM ${nim} belum terdaftar; untuk menambah mahasiswa baru wajib isi: ${kurang.join(', ')}` });
+        continue;
+      }
+      if (!prodi) {
+        errors.push({ row: rowNumber, message: `Prodi "${kodeProdi || namaProdi}" tidak ditemukan` });
+        continue;
+      }
+      if (angkatan < 1990 || angkatan > 2100) {
+        errors.push({ row: rowNumber, message: `Angkatan "${cellString(data['Angkatan'])}" tidak valid (contoh: 2026)` });
+        continue;
+      }
+      baru = { nim, jurusanId: prodi.id, tahunMasuk: angkatan, urutan: Number(nim.replace(/\D/g, '').slice(-4)) || 0 };
     }
 
     const nama = cellString(data['Nama']);
@@ -494,7 +593,48 @@ const importMahasiswa = async (fileBase64, actorId) => {
       continue;
     }
 
+    const mahasiswaPayload = {};
+    if (nama) mahasiswaPayload.namaLengkap = nama;
+    const kelasRaw = cellString(data['Kelas']);
+    let golongan = null;
+    if (kelasRaw) {
+      golongan = findGolongan(kelasRaw);
+      if (!golongan) {
+        errors.push({ row: rowNumber, message: `Kelas "${kelasRaw}" tidak dikenali (pilihan: ${golonganList.map((g) => g.namaKelas).join(', ')})` });
+        continue;
+      }
+      mahasiswaPayload.golonganKelasId = golongan.id;
+    }
+    const statusMasuk = cellString(data['Status Masuk']).toUpperCase().replace(/\s+/g, '_');
+    if (statusMasuk) {
+      if (!STATUS_MASUK.includes(statusMasuk)) {
+        errors.push({ row: rowNumber, message: `Status Masuk harus salah satu dari: ${STATUS_MASUK.join(', ')}` });
+        continue;
+      }
+      mahasiswaPayload.statusMasuk = statusMasuk;
+    }
+    if (data['Asal Sekolah'] !== undefined) mahasiswaPayload.asalSekolah = cellString(data['Asal Sekolah']).slice(0, 150) || null;
+    if (data['Alamat'] !== undefined) mahasiswaPayload.alamat = cellString(data['Alamat']) || null;
+    const emailRaw = cellString(data['Email']);
+    if (emailRaw && isEmail(emailRaw)) mahasiswaPayload.email = emailRaw;
+    const hpRaw = cellString(data['No HP']);
+    if (hpRaw) mahasiswaPayload.noTelepon = hpRaw.slice(0, 20);
+
     const biodataPayload = {};
+    if (golongan) biodataPayload.kelas = golongan.namaKelas;
+    setIfPresent(biodataPayload, data, 'Waktu Kuliah', 'waktuKuliah');
+    const pilihanSalah = Object.entries(PILIHAN_BIODATA).find(([header, { key, values }]) => {
+      const raw = cellString(data[header]);
+      if (!raw) return false;
+      const nilai = values.find((v) => v.toLowerCase().replace(/[\s-]/g, '') === raw.toLowerCase().replace(/[\s-]/g, ''));
+      if (nilai) biodataPayload[key] = nilai;
+      return !nilai;
+    });
+    if (pilihanSalah) {
+      const [header, { values }] = pilihanSalah;
+      errors.push({ row: rowNumber, message: `${header} "${cellString(data[header])}" harus salah satu dari: ${values.join(', ')}` });
+      continue;
+    }
     setIfPresent(biodataPayload, data, 'Tempat Lahir', 'tempatLahir');
     if (data['Tanggal Lahir'] !== undefined) biodataPayload.tanggalLahir = cellDate(data['Tanggal Lahir']);
     if (jenisKelamin) biodataPayload.jenisKelamin = jenisKelamin;
@@ -545,14 +685,40 @@ const importMahasiswa = async (fileBase64, actorId) => {
     setIfPresent(biodataPayload, data, 'Program Studi Asal', 'programStudiAsal');
 
     try {
-      if (nama) await mahasiswa.update({ namaLengkap: nama, updatedBy: actorId });
-      if (Object.keys(biodataPayload).length) {
-        const biodata = await MahasiswaBiodata.findOne({ where: { mahasiswaId: mahasiswa.id } });
-        if (biodata) {
-          await biodata.update(biodataPayload);
-        } else {
-          await MahasiswaBiodata.create({ ...biodataPayload, mahasiswaId: mahasiswa.id });
+      let target = mahasiswa;
+      if (baru) {
+        if (!mahasiswaPayload.golonganKelasId) {
+          const reguler = findGolongan('Reguler') ?? golonganList[0];
+          mahasiswaPayload.golonganKelasId = reguler?.id;
+          if (reguler && !biodataPayload.kelas) biodataPayload.kelas = reguler.namaKelas;
         }
+        target = await sequelize.transaction(async (transaction) => {
+          const created = await Mahasiswa.create(
+            {
+              ...baru,
+              ...mahasiswaPayload,
+              isActive: true,
+              password: await bcrypt.hash(nim, 10),
+              createdBy: actorId,
+              updatedBy: actorId,
+            },
+            { transaction }
+          );
+          await MahasiswaBiodata.create({ ...biodataPayload, mahasiswaId: created.id }, { transaction });
+          return created;
+        });
+        createdCount += 1;
+      } else {
+        if (Object.keys(mahasiswaPayload).length) await target.update({ ...mahasiswaPayload, updatedBy: actorId });
+        if (Object.keys(biodataPayload).length) {
+          const biodata = await MahasiswaBiodata.findOne({ where: { mahasiswaId: target.id } });
+          if (biodata) {
+            await biodata.update(biodataPayload);
+          } else {
+            await MahasiswaBiodata.create({ ...biodataPayload, mahasiswaId: target.id });
+          }
+        }
+        updatedCount += 1;
       }
       successCount += 1;
     } catch (err) {
@@ -560,10 +726,11 @@ const importMahasiswa = async (fileBase64, actorId) => {
     }
   }
 
-  return { successCount, errorCount: errors.length, errors };
+  return { successCount, createdCount, updatedCount, errorCount: errors.length, errors };
 };
 
 module.exports = {
+  resetPasswordMahasiswa,
   listMahasiswa,
   getMahasiswaById,
   updateMahasiswa,

@@ -5,10 +5,11 @@ const ApiError = require('../utils/ApiError');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { generateResetToken, hashToken } = require('../utils/resetToken');
 const { sendMail } = require('../utils/mailer');
+const { resolveLoginContext } = require('./academicContext.service');
 
 const buildTokenPayload = (user) => ({ sub: user.id, roleId: user.roleId, roleCode: user.role?.code });
 
-const login = async (username, password) => {
+const login = async (username, password, context = {}) => {
   const user = await User.scope(['withPassword', 'withPhoto']).findOne({
     where: { username },
     include: [{ model: Role, as: 'role' }],
@@ -18,6 +19,9 @@ const login = async (username, password) => {
 
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) throw new ApiError(401, 'Username atau password salah');
+
+  // Tahun akademik acuan & prodi (modul Prodi) yang dipilih di form login.
+  const academicContext = await resolveLoginContext(user, context);
 
   user.lastLoginAt = new Date();
   await user.save();
@@ -31,7 +35,7 @@ const login = async (username, password) => {
   delete safeUser.resetPasswordToken;
   delete safeUser.resetPasswordExpires;
 
-  return { user: safeUser, accessToken, refreshToken };
+  return { user: safeUser, accessToken, refreshToken, context: academicContext };
 };
 
 const refresh = async (token) => {

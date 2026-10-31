@@ -1,10 +1,19 @@
 const catchAsync = require('../utils/catchAsync');
 const sendResponse = require('../utils/ApiResponse');
 const krsService = require('../services/krs.service');
+const { getCetakData, buildKrsCetakPdf } = require('../services/krsCetak.service');
+const kampusService = require('../services/kampus.service');
 
 const list = catchAsync(async (req, res) => {
   const { data, meta } = await krsService.listKrs(req.query);
   sendResponse(res, 200, { message: 'KRS fetched', data, meta });
+});
+
+const cetak = catchAsync(async (req, res) => {
+  const [data, kampus] = await Promise.all([getCetakData(req.query), kampusService.getKampus()]);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'inline; filename="krs-mahasiswa.pdf"');
+  buildKrsCetakPdf(data, kampus).pipe(res);
 });
 
 const detail = catchAsync(async (req, res) => {
@@ -32,4 +41,9 @@ const remove = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'KRS deleted' });
 });
 
-module.exports = { list, detail, kuota, create, update, remove };
+const setujuiMassal = catchAsync(async (req, res) => {
+  const data = await krsService.setujuiMassal(req.body.ids, req.user.id);
+  sendResponse(res, 200, { message: `${data.disetujui} KRS disetujui`, data });
+});
+
+module.exports = { cetak, list, detail, kuota, create, update, remove, setujuiMassal };

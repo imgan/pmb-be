@@ -1,5 +1,8 @@
 const { Op } = require('sequelize');
-const { Gelombang } = require('../models');
+const { Gelombang, TahunPmb } = require('../models');
+const tahunModulService = require('./tahunModul.service');
+
+const INCLUDE_TAHUN = [{ model: TahunPmb.unscoped(), as: 'tahunPmb', attributes: ['id', 'nama', 'jenisSemester', 'isActive'], required: false }];
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
@@ -16,9 +19,12 @@ const listGelombang = async (query) => {
   if (query.search) {
     where.namaGelombang = { [Op.like]: `%${query.search}%` };
   }
+  // Tahun Ajaran PMB gelombang (Modul Admin › Tahun (PMB)).
+  if (query.tahunPmbId) where.tahunPmbId = Number(query.tahunPmbId);
 
   const { rows, count } = await Gelombang.findAndCountAll({
     where,
+    include: INCLUDE_TAHUN,
     limit,
     offset,
     order: resolveOrder(query, SORTABLE_COLUMNS, [['startDate', 'DESC']]),
@@ -27,27 +33,48 @@ const listGelombang = async (query) => {
 };
 
 const getGelombangById = async (id) => {
-  const gelombang = await Gelombang.findByPk(id);
+  const gelombang = await Gelombang.findByPk(id, { include: INCLUDE_TAHUN });
   if (!gelombang) throw new ApiError(404, 'Gelombang not found');
   return gelombang;
 };
 
+/**
+ * Gelombang untuk formulir pendaftaran: diutamakan gelombang Tahun PMB aktif (gelombang tanpa tahun tetap ikut,
+ * agar data lama berjalan); tidak ada → semua gelombang seperti sebelumnya.
+ */
 const getActiveGelombang = async () => {
+  const tahunPmb = await tahunModulService.aktif('pmb');
+  if (tahunPmb) {
+    const hasil = await cariGelombangAktif({ [Op.or]: [{ tahunPmbId: tahunPmb.id }, { tahunPmbId: null }] });
+    if (hasil) return hasil;
+  }
+  return cariGelombangAktif({});
+};
+
+/**
+ * Status diatur admin: AKTIF = dipaksa aktif (didahulukan), TIDAK_AKTIF = tidak pernah dipilih, OTOMATIS = aktif bila
+ * hari ini di antara tanggal mulai–selesai (lalu gelombang mendatang terdekat, lalu yang terakhir berakhir).
+ */
+const cariGelombangAktif = async (lingkup) => {
   const today = new Date().toISOString().slice(0, 10);
 
+  const dipaksa = await Gelombang.findOne({ where: { ...lingkup, status: 'AKTIF' }, order: [['startDate', 'DESC']] });
+  if (dipaksa) return dipaksa;
+
+  const otomatis = { ...lingkup, status: 'OTOMATIS' };
   const ongoing = await Gelombang.findOne({
-    where: { startDate: { [Op.lte]: today }, endDate: { [Op.gte]: today } },
+    where: { ...otomatis, startDate: { [Op.lte]: today }, endDate: { [Op.gte]: today } },
     order: [['startDate', 'DESC']],
   });
   if (ongoing) return ongoing;
 
   const upcoming = await Gelombang.findOne({
-    where: { startDate: { [Op.gt]: today } },
+    where: { ...otomatis, startDate: { [Op.gt]: today } },
     order: [['startDate', 'ASC']],
   });
   if (upcoming) return upcoming;
 
-  return Gelombang.findOne({ order: [['endDate', 'DESC']] });
+  return Gelombang.findOne({ where: otomatis, order: [['endDate', 'DESC']] });
 };
 
 const createGelombang = (payload, actorId) =>

@@ -72,6 +72,11 @@ const updateKeringanan = async (id, payload, actorId) => {
   const item = await getKeringananById(id);
   const { nim, ...rest } = payload;
   const updates = { ...rest, updatedBy: actorId };
+  const berlaku = ['berlakuKrs', 'berlakuUts', 'berlakuUas'].map((k) => updates[k] ?? item[k]);
+  if (!berlaku.some(Boolean)) throw new ApiError(400, 'Pilih minimal satu: KRS, UTS, atau UAS');
+  const tanggal = updates.tanggal ?? item.tanggal;
+  const sampai = updates.sampaiTanggal === undefined ? item.sampaiTanggal : updates.sampaiTanggal;
+  if (sampai && new Date(sampai) < new Date(tanggal)) throw new ApiError(400, 'Sampai tanggal tidak boleh sebelum tanggal keringanan');
   if (nim) updates.mahasiswaId = await resolveMahasiswaId(nim);
   await item.update(updates);
   return getKeringananById(id);

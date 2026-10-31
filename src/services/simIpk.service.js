@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 const { Krs, TahunAjaran, Mahasiswa, Jurusan, NilaiMahasiswa } = require('../models');
 const { GRADE_BOBOT } = require('../utils/gradeScale');
+const { loadKelompokKode, pilihNilaiEfektif } = require('../utils/ekuivalensiMatkul');
 
 // IPS = indeks prestasi semester berjalan (nilai_mahasiswa.semester === semester KRS ybs).
 // IPK = indeks prestasi kumulatif s.d. semester berjalan (nilai_mahasiswa.semester <= semester KRS ybs).
@@ -29,10 +30,14 @@ const listIpk = async ({ tahun, semester } = {}) => {
   if (krsList.length === 0) return [];
 
   const mahasiswaIds = [...new Set(krsList.map((krs) => krs.mahasiswaId))];
-  const nilaiList = await NilaiMahasiswa.findAll({
-    attributes: ['mahasiswaId', 'semester', 'sks', 'grade'],
-    where: { mahasiswaId: { [Op.in]: mahasiswaIds } },
-  });
+  const [nilaiList, kelompokOf] = await Promise.all([
+    NilaiMahasiswa.findAll({
+      attributes: ['mahasiswaId', 'kodeMataKuliah', 'semester', 'sks', 'grade'],
+      where: { mahasiswaId: { [Op.in]: mahasiswaIds } },
+      raw: true,
+    }),
+    loadKelompokKode(),
+  ]);
   const nilaiByMahasiswa = new Map();
   nilaiList.forEach((n) => {
     const list = nilaiByMahasiswa.get(n.mahasiswaId) ?? [];
@@ -60,7 +65,8 @@ const listIpk = async ({ tahun, semester } = {}) => {
 
     const nilai = nilaiByMahasiswa.get(krs.mahasiswaId) ?? [];
     const ips = hitungIp(nilai.filter((n) => n.semester === krs.semester));
-    const ipk = hitungIp(nilai.filter((n) => n.semester <= krs.semester));
+    // Mata kuliah yang diulang (termasuk lewat konversi kurikulum) hanya dihitung sekali di IPK.
+    const ipk = hitungIp(pilihNilaiEfektif(nilai.filter((n) => n.semester <= krs.semester), kelompokOf));
 
     const entry = grouped.get(key);
     entry.jumlahMahasiswa += 1;

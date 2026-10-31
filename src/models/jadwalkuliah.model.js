@@ -43,11 +43,10 @@ module.exports = (sequelize, DataTypes) => {
     JadwalKuliah.belongsTo(models.MataKuliah, { foreignKey: 'mataKuliahId', as: 'mataKuliah' });
     JadwalKuliah.hasMany(models.KrsDetail, { foreignKey: 'jadwalKuliahId', as: 'krsDetailList' });
     JadwalKuliah.belongsToMany(models.Dosen, {
-      through: 'jadwal_kuliah_dosen_pengampu',
+      through: models.JadwalKuliahDosenPengampu,
       foreignKey: 'jadwalKuliahId',
       otherKey: 'dosenId',
       as: 'dosenPengampu',
-      timestamps: false,
     });
     JadwalKuliah.belongsTo(models.User, { foreignKey: 'createdBy', as: 'creator' });
     JadwalKuliah.belongsTo(models.User, { foreignKey: 'updatedBy', as: 'updater' });

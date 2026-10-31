@@ -7,6 +7,9 @@ const { createDosen, updateDosen, importDosen } = require('../validations/dosen.
 const MENU = require('../constants/menuCodes');
 const ACTION = require('../constants/actions');
 
+// Menu asal + Modul Admin → Master → Dosen (halaman yang sama).
+const MANAGE_CODES = [MENU.DOSEN_MANAGEMENT, MENU.ADMIN_MASTER_DOSEN_MANAGEMENT];
+
 router.use(authenticate);
 
 /**
@@ -38,19 +41,23 @@ router.use(authenticate);
  *       201:
  *         description: Dosen created
  */
-router.get('/', authorize(MENU.DOSEN_MANAGEMENT, ACTION.READ), dosenController.list);
-router.post('/', authorize(MENU.DOSEN_MANAGEMENT, ACTION.CREATE), validate(createDosen), dosenController.create);
+router.get('/', authorize(MANAGE_CODES, ACTION.READ), dosenController.list);
+router.post('/', authorize(MANAGE_CODES, ACTION.CREATE), validate(createDosen), dosenController.create);
 
 /**
  * @swagger
  * /dosen/stats:
  *   get:
- *     summary: Ringkasan jumlah dosen dikelompokkan per kelompok fakultas
+ *     summary: Ringkasan jumlah dosen per kelompok fakultas, atau per prodi homebase (groupBy=prodi)
  *     tags: [Dosen]
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: groupBy
+ *         schema: { type: string, enum: [prodi] }
  *     responses:
  *       200:
- *         description: Ringkasan per kelompok fakultas
+ *         description: Ringkasan jumlah dosen
  */
 router.get('/stats', authorize([MENU.DOSEN_MANAGEMENT, MENU.BAAK_DASHBOARD], ACTION.READ), dosenController.stats);
 
@@ -65,7 +72,7 @@ router.get('/stats', authorize([MENU.DOSEN_MANAGEMENT, MENU.BAAK_DASHBOARD], ACT
  *       200:
  *         description: File Excel dosen
  */
-router.get('/export', authorize(MENU.DOSEN_MANAGEMENT, ACTION.READ), dosenController.exportExcel);
+router.get('/export', authorize(MANAGE_CODES, ACTION.READ), dosenController.exportExcel);
 
 /**
  * @swagger
@@ -78,7 +85,7 @@ router.get('/export', authorize(MENU.DOSEN_MANAGEMENT, ACTION.READ), dosenContro
  *       200:
  *         description: File template Excel
  */
-router.get('/import-template', authorize(MENU.DOSEN_MANAGEMENT, ACTION.READ), dosenController.importTemplate);
+router.get('/import-template', authorize(MANAGE_CODES, ACTION.READ), dosenController.importTemplate);
 
 /**
  * @swagger
@@ -102,7 +109,7 @@ router.get('/import-template', authorize(MENU.DOSEN_MANAGEMENT, ACTION.READ), do
  *       200:
  *         description: Ringkasan hasil import
  */
-router.post('/import', authorize(MENU.DOSEN_MANAGEMENT, ACTION.CREATE), validate(importDosen), dosenController.importExcel);
+router.post('/import', authorize(MANAGE_CODES, ACTION.CREATE), validate(importDosen), dosenController.importExcel);
 
 /**
  * @swagger
@@ -137,8 +144,8 @@ router.post('/import', authorize(MENU.DOSEN_MANAGEMENT, ACTION.CREATE), validate
  *       200:
  *         description: Dosen deleted
  */
-router.get('/:id', authorize(MENU.DOSEN_MANAGEMENT, ACTION.READ), dosenController.detail);
-router.put('/:id', authorize(MENU.DOSEN_MANAGEMENT, ACTION.UPDATE), validate(updateDosen), dosenController.update);
-router.delete('/:id', authorize(MENU.DOSEN_MANAGEMENT, ACTION.DELETE), dosenController.remove);
+router.get('/:id', authorize(MANAGE_CODES, ACTION.READ), dosenController.detail);
+router.put('/:id', authorize(MANAGE_CODES, ACTION.UPDATE), validate(updateDosen), dosenController.update);
+router.delete('/:id', authorize(MANAGE_CODES, ACTION.DELETE), dosenController.remove);
 
 module.exports = router;

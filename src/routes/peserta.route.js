@@ -3,6 +3,9 @@ const pesertaController = require('../controllers/peserta.controller');
 const authenticate = require('../middlewares/auth.middleware');
 const authenticatePeserta = require('../middlewares/pesertaAuth.middleware');
 const validate = require('../middlewares/validate.middleware');
+const authorize = require('../middlewares/permission.middleware');
+const MENU = require('../constants/menuCodes');
+const ACTION = require('../constants/actions');
 const {
   registerPeserta,
   createPeserta,
@@ -12,8 +15,14 @@ const {
   resetPasswordPeserta,
   updateMyProfile,
   saveBiodata,
+  gantiPassword,
+  saveTargetPmb,
+  saveBiodataAdmin,
+  setBiodataLock,
 } = require('../validations/peserta.validation');
 const { uploadDokumen } = require('../validations/pesertaDokumen.validation');
+const { saveDataPmb } = require('../validations/calonMahasiswa.validation');
+const { simpanJawabanUjian } = require('../validations/tesUjian.validation');
 
 /**
  * @swagger
@@ -157,6 +166,8 @@ router.put('/me', authenticatePeserta, validate(updateMyProfile), pesertaControl
  *       409:
  *         description: NIK already registered
  */
+// Ganti password sendiri (wajib saat masih memakai password awal = nomor HP).
+router.put('/me/password', authenticatePeserta, validate(gantiPassword), pesertaController.gantiPassword);
 router.put('/me/biodata', authenticatePeserta, validate(saveBiodata), pesertaController.saveBiodata);
 
 /**
@@ -208,6 +219,14 @@ router.get('/me/dokumen', authenticatePeserta, pesertaController.listMyDokumen);
  */
 router.put('/me/dokumen/:dokumenKelengkapanId', authenticatePeserta, validate(uploadDokumen), pesertaController.uploadMyDokumen);
 router.delete('/me/dokumen/:dokumenKelengkapanId', authenticatePeserta, pesertaController.removeMyDokumen);
+// Portal peserta: Sumber Informasi 2 (kelas, skema pembayaran, ukuran almamater, gelombang, jurusan 1–3). Ditolak bila dikunci admin.
+router.get('/me/data-pmb', authenticatePeserta, pesertaController.getMyDataPmb);
+router.put('/me/data-pmb', authenticatePeserta, validate(saveDataPmb), pesertaController.saveMyDataPmb);
+router.get('/me/tes-ujian', authenticatePeserta, pesertaController.listMyTesUjian);
+// Pengerjaan soal online tes PMB (bank ujian LMS): mulai / lanjutkan, simpan jawaban per soal, kirim.
+router.post('/me/tes-ujian/:id/mulai', authenticatePeserta, pesertaController.mulaiMyTesUjian);
+router.put('/me/tes-ujian/:id/jawaban', authenticatePeserta, validate(simpanJawabanUjian), pesertaController.simpanJawabanMyTesUjian);
+router.post('/me/tes-ujian/:id/kirim', authenticatePeserta, pesertaController.kirimMyTesUjian);
 
 router.use(authenticate);
 
@@ -242,6 +261,10 @@ router.use(authenticate);
  */
 router.get('/', pesertaController.list);
 router.post('/', validate(createPeserta), pesertaController.create);
+router.get('/grafik-tahunan', pesertaController.grafikTahunan);
+// Dashboard PMB (Modul Admin): ringkasan, tren, pencapaian vs target per prodi, jalur, sumber informasi, sekolah, wilayah, gender.
+router.get('/dashboard', pesertaController.dashboard);
+router.put('/dashboard/target', validate(saveTargetPmb), pesertaController.saveTarget);
 
 /**
  * @swagger
@@ -284,6 +307,15 @@ router.post('/', validate(createPeserta), pesertaController.create);
  */
 router.get('/:id', pesertaController.detail);
 router.put('/:id', validate(updatePeserta), pesertaController.update);
+// Admin: reset password peserta ke default (nomor HP), wajib diganti saat login berikutnya.
+router.post('/:id/reset-password-default', pesertaController.resetPasswordDefault);
 router.delete('/:id', pesertaController.remove);
+// Admin (menu Peserta): ubah, kunci/buka kunci, dan hapus biodata peserta.
+const BIODATA = MENU.CALON_MAHASISWA_MANAGEMENT;
+router.put('/:id/biodata', authorize(BIODATA, ACTION.UPDATE), validate(saveBiodataAdmin), pesertaController.saveBiodataAdmin);
+router.put('/:id/biodata/kunci', authorize(BIODATA, ACTION.UPDATE), validate(setBiodataLock), pesertaController.setBiodataLock);
+router.delete('/:id/biodata', authorize(BIODATA, ACTION.DELETE), pesertaController.removeBiodata);
+// Admin (menu Peserta): popup Dokumen Pendaftaran — status upload tiap jenis dokumen kelengkapan.
+router.get('/:id/dokumen', authorize(BIODATA, ACTION.READ), pesertaController.listDokumen);
 
 module.exports = router;

@@ -3,7 +3,7 @@ const controller = require('../controllers/pembimbingAkademik.controller');
 const authenticate = require('../middlewares/auth.middleware');
 const authorize = require('../middlewares/permission.middleware');
 const validate = require('../middlewares/validate.middleware');
-const { createPembimbingAkademik, updatePembimbingAkademik } = require('../validations/pembimbingAkademik.validation');
+const { createPembimbingAkademik, updatePembimbingAkademik, setMahasiswaBimbingan } = require('../validations/pembimbingAkademik.validation');
 const MENU = require('../constants/menuCodes');
 const ACTION = require('../constants/actions');
 
@@ -22,6 +22,14 @@ router.post(
   authorize(MENU.PRODI_PEMBIMBING_AKADEMIK_MANAGEMENT, ACTION.CREATE),
   validate(createPembimbingAkademik),
   controller.create
+);
+// Atur mahasiswa bimbingan (penetapan pembimbing akademik ke mahasiswa).
+router.get('/:id/mahasiswa', authorize(MENU.PRODI_PEMBIMBING_AKADEMIK_MANAGEMENT, ACTION.READ), controller.listMahasiswa);
+router.put(
+  '/:id/mahasiswa',
+  authorize(MENU.PRODI_PEMBIMBING_AKADEMIK_MANAGEMENT, ACTION.UPDATE),
+  validate(setMahasiswaBimbingan),
+  controller.setMahasiswa
 );
 router.get('/:id', authorize(MENU.PRODI_PEMBIMBING_AKADEMIK_MANAGEMENT, ACTION.READ), controller.detail);
 router.put(

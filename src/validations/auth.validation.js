@@ -3,6 +3,10 @@ const Joi = require('joi');
 const login = Joi.object({
   username: Joi.string().required(),
   password: Joi.string().required(),
+  // Konteks sesi: tahun akademik acuan, modul yang dipilih, dan prodi (khusus modul Prodi).
+  tahunAjaranId: Joi.number().integer().allow(null),
+  module: Joi.string().max(30).allow(null, ''),
+  kodeProdi: Joi.string().max(20).allow(null, ''),
 });
 
 const refreshToken = Joi.object({

@@ -1,4 +1,8 @@
 const PDFDocument = require('pdfkit');
+const { suratPdfDocOptions, suratPdfFilename } = require('../utils/suratPdfName');
+const { buildFormulirSidangTaPdf } = require('./formulirSidangTaPdf.service');
+const { buildRekapNilaiSidangPdf } = require('./rekapNilaiSidangPdf.service');
+const { buildJurnalKonsultasiTaPdf } = require('./jurnalKonsultasiTaPdf.service');
 
 const MONTHS_ID = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -91,7 +95,7 @@ const signatureBlock = (doc, { date, jabatan, name }) => {
 // ---- SURAT KETERANGAN (Aktif Kuliah / Lulus Menunggu Ijazah / Ujian UAS) ----
 const buildSuratKeteranganPdf = (data) => {
   const { surat, mahasiswa, jurusan } = data;
-  const doc = new PDFDocument({ size: 'A4', margin: 56, bufferPages: true });
+  const doc = new PDFDocument(suratPdfDocOptions(data));
 
   doc.font('Times-Bold').fontSize(14).text('SURAT KETERANGAN', { align: 'center', underline: true });
   doc.moveDown(0.15);
@@ -173,7 +177,7 @@ const buildSuratKeteranganPdf = (data) => {
 // ---- SURAT OBSERVASI / KULIAH KERJA PRAKTEK (KKP) ----
 const buildInstansiSuratPdf = (data, { perihal, bodyText }) => {
   const { surat, mahasiswa, jurusan } = data;
-  const doc = new PDFDocument({ size: 'A4', margin: 56, bufferPages: true });
+  const doc = new PDFDocument(suratPdfDocOptions(data));
 
   doc.font('Times-Roman').fontSize(11);
   kv(doc, 'Nomor', surat.nomorSurat ? nomorSuratLabel(surat.nomorSurat, surat.tanggalInput) : '', { labelWidth: 80 });
@@ -224,7 +228,7 @@ const buildKkpPdf = (data) =>
 // ---- SURAT REKOMENDASI KAMPUS MERDEKA ----
 const buildRekomendasiKampusMerdekaPdf = (data) => {
   const { surat, mahasiswa, jurusan } = data;
-  const doc = new PDFDocument({ size: 'A4', margin: 56, bufferPages: true });
+  const doc = new PDFDocument(suratPdfDocOptions(data));
   const year = surat.tanggalInput ? new Date(surat.tanggalInput).getFullYear() : new Date().getFullYear();
 
   doc.font('Times-Bold').fontSize(13).text(
@@ -289,8 +293,15 @@ const buildRekomendasiKampusMerdekaPdf = (data) => {
   return doc;
 };
 
-const buildSuratPdf = (data) => {
+// kampus (master Kampus) hanya dipakai jenis yang mencetak kop resmi: Formulir Sidang TA & Rekap Nilai Sidang.
+const buildSuratPdf = (data, kampus) => {
   switch (data.surat.jenisSurat) {
+    case 'DAFTAR_SIDANG_TA':
+      return buildFormulirSidangTaPdf(data, kampus);
+    case 'REKAP_NILAI_SIDANG':
+      return buildRekapNilaiSidangPdf(data, kampus);
+    case 'JURNAL_KONSULTASI_TA':
+      return buildJurnalKonsultasiTaPdf(data, kampus);
     case 'OBSERVASI':
       return buildObservasiPdf(data);
     case 'KKP':
@@ -302,4 +313,7 @@ const buildSuratPdf = (data) => {
   }
 };
 
-module.exports = { buildSuratKeteranganPdf, buildObservasiPdf, buildKkpPdf, buildRekomendasiKampusMerdekaPdf, buildSuratPdf };
+
+module.exports = {
+  suratPdfFilename,
+  buildSuratKeteranganPdf, buildObservasiPdf, buildKkpPdf, buildRekomendasiKampusMerdekaPdf, buildSuratPdf };

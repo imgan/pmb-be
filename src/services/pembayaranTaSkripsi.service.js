@@ -22,7 +22,7 @@ const listPembayaran = async (query) => {
         model: Mahasiswa,
         as: 'mahasiswa',
         required: true,
-        where: Object.keys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
+        where: Reflect.ownKeys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
         include: [{ model: Jurusan, as: 'jurusan' }],
       },
     ],
@@ -146,10 +146,12 @@ const getRingkasanTaSkripsiByNim = async (nim) => {
  * periode), dihitung sekali untuk semua mahasiswa yang punya transaksi TA/Skripsi — dipakai
  * laporan Tunggakan Mahasiswa supaya tidak query per-mahasiswa satu-satu.
  */
-const buildSisaTaSkripsiMap = async () => {
+const buildSisaTaSkripsiMap = async ({ mahasiswaId } = {}) => {
+  // mahasiswaId opsional: batasi hitungan ke satu mahasiswa (cek batas tagihan di portal mahasiswa).
+  const where = mahasiswaId ? { mahasiswaId } : {};
   const [pembayaranList, perpanjanganList] = await Promise.all([
-    PembayaranTaSkripsi.findAll({ attributes: ['mahasiswaId', 'periode', 'nominal'], raw: true }),
-    PerpanjanganTaSkripsi.findAll({ attributes: ['mahasiswaId', 'periode', 'nominal'], raw: true }),
+    PembayaranTaSkripsi.findAll({ where, attributes: ['mahasiswaId', 'periode', 'nominal'], raw: true }),
+    PerpanjanganTaSkripsi.findAll({ where, attributes: ['mahasiswaId', 'periode', 'nominal'], raw: true }),
   ]);
   if (!pembayaranList.length && !perpanjanganList.length) return new Map();
 

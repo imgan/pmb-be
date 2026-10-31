@@ -1,7 +1,8 @@
 const catchAsync = require('../utils/catchAsync');
 const sendResponse = require('../utils/ApiResponse');
 const suratKeteranganService = require('../services/suratKeterangan.service');
-const { buildSuratPdf } = require('../services/suratKeteranganPdf.service');
+const { buildSuratPdf, suratPdfFilename } = require('../services/suratKeteranganPdf.service');
+const kampusService = require('../services/kampus.service');
 
 const list = catchAsync(async (req, res) => {
   const { data, meta } = await suratKeteranganService.listSurat(req.query);
@@ -34,9 +35,12 @@ const cetakData = catchAsync(async (req, res) => {
 });
 
 const cetakPdf = catchAsync(async (req, res) => {
-  const data = await suratKeteranganService.getCetakData(req.params.id);
-  const doc = buildSuratPdf(data);
-  const filename = `surat-keterangan-${data.mahasiswa.nim}.pdf`;
+  const [data, kampus] = await Promise.all([
+    suratKeteranganService.getCetakData(req.params.id),
+    kampusService.getKampus(),
+  ]);
+  const doc = buildSuratPdf(data, kampus);
+  const filename = suratPdfFilename(data);
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="${filename}"`);

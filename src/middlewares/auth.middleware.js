@@ -17,6 +17,12 @@ const authenticate = catchAsync(async (req, res, next) => {
     throw new ApiError(401, 'Invalid or expired token');
   }
 
+  // Token portal (mahasiswa/dosen/peserta) bertanda `type` dan sub-nya id tabel lain — jangan sampai
+  // dianggap user staf dengan id yang sama. Token staf tidak punya `type`.
+  if (payload.type) {
+    throw new ApiError(401, 'Token ini bukan token staf');
+  }
+
   const user = await User.findByPk(payload.sub, { include: [{ model: Role, as: 'role' }] });
   if (!user || !user.isActive) {
     throw new ApiError(401, 'User is not authorized');

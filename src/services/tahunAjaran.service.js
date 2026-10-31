@@ -37,22 +37,23 @@ const getTahunAjaranById = async (id) => {
   return tahunAjaran;
 };
 
-const ensureUniqueNama = async (nama, excludeId) => {
-  const where = { nama };
+// Satu tahun ajaran punya dua periode (Ganjil & Genap) dengan nama yang sama, jadi unik per nama + semester.
+const ensureUniqueNama = async (nama, jenisSemester = 'GANJIL', excludeId) => {
+  const where = { nama, jenisSemester };
   if (excludeId) where.id = { [Op.ne]: excludeId };
   const existing = await TahunAjaran.findOne({ where });
-  if (existing) throw new ApiError(409, 'Nama tahun ajaran sudah digunakan');
+  if (existing) throw new ApiError(409, `Tahun ajaran ${nama} ${jenisSemester} sudah ada`);
 };
 
 const createTahunAjaran = async (payload, actorId) => {
-  await ensureUniqueNama(payload.nama);
+  await ensureUniqueNama(payload.nama, payload.jenisSemester);
   return TahunAjaran.create({ ...payload, createdBy: actorId, updatedBy: actorId });
 };
 
 const updateTahunAjaran = async (id, payload, actorId) => {
   const tahunAjaran = await getTahunAjaranById(id);
-  if (payload.nama) {
-    await ensureUniqueNama(payload.nama, id);
+  if (payload.nama || payload.jenisSemester) {
+    await ensureUniqueNama(payload.nama ?? tahunAjaran.nama, payload.jenisSemester ?? tahunAjaran.jenisSemester, id);
   }
   await tahunAjaran.update({ ...payload, updatedBy: actorId });
   return tahunAjaran;

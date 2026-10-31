@@ -24,5 +24,6 @@ router.post(
   controller.create
 );
 router.delete('/:id', authorize(MENU.KEUANGAN_PEMBAYARAN_KULIAH_MANAGEMENT, ACTION.DELETE), controller.remove);
+router.get('/:id/kwitansi', authorize(MENU.KEUANGAN_PEMBAYARAN_KULIAH_MANAGEMENT, ACTION.READ), controller.kwitansiPdf);
 
 module.exports = router;

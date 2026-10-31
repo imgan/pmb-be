@@ -12,6 +12,7 @@ const listBiodataMahasiswa = async (query) => {
   const { page, limit, offset } = getPagination(query);
   const where = {};
   if (query.nim) where.nim = { [Op.like]: `%${query.nim}%` };
+  if (query.jurusanId) where.jurusanId = query.jurusanId;
   if (query.search) {
     where[Op.or] = [{ nim: { [Op.like]: `%${query.search}%` } }, { namaLengkap: { [Op.like]: `%${query.search}%` } }];
   }

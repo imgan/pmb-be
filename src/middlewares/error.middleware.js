@@ -24,10 +24,13 @@ const errorHandler = (err, req, res, next) => {
     console.error(err);
   }
 
+  // Stack trace hanya untuk debugging lokal: mode development, error server (5xx), dan request dari localhost —
+  // server yang berjalan tanpa NODE_ENV=production pun tidak membocorkan path/struktur kode ke publik.
+  const lokal = ['localhost', '127.0.0.1', '::1'].includes(req.hostname);
   res.status(statusCode).json({
     success: false,
     message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    ...(process.env.NODE_ENV === 'development' && statusCode >= 500 && lokal && { stack: err.stack }),
   });
 };
 

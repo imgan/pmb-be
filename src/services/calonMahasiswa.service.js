@@ -1,12 +1,31 @@
 const { Op } = require('sequelize');
-const { CalonMahasiswa, Gelombang, Peserta } = require('../models');
+const { sequelize, CalonMahasiswa, Gelombang, Peserta, PesertaBiodata, SumberInformasi, GolonganKelas, Beasiswa, Jurusan, UkuranAlmamater } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
+const { hitungStatusDokumen, flagDokumen, syncFlagDokumen } = require('../utils/statusDokumen');
 
 const includeRelations = [
   { model: Gelombang, as: 'gelombang' },
-  { model: Peserta, as: 'peserta', attributes: ['id', 'namaLengkap', 'email', 'statusUjian', 'statusKelulusan'] },
+  {
+    model: Peserta,
+    as: 'peserta',
+    attributes: ['id', 'namaLengkap', 'email', 'noTelepon', 'wajibGantiPassword', 'statusUjian', 'statusKelulusan', 'sumberInformasiId', 'golonganKelasId', 'jurusanId', 'beasiswaId'],
+    // Data pendidikan (status ikon & popup Data Pendidikan di menu Peserta).
+    include: [
+      { model: PesertaBiodata, as: 'biodata', attributes: ['id', 'jurusanSekolah', 'tahunLulus', 'jenisPengelolaanSekolah', 'alamatSekolah', 'nisn'] },
+      { model: SumberInformasi, as: 'sumberInformasi', attributes: ['id', 'namaInformasi'] },
+    ],
+  },
+  // Popup Sumber Informasi.
+  { model: SumberInformasi, as: 'sumberInformasi', attributes: ['id', 'namaInformasi'] },
+  // Popup Sumber Informasi 2.
+  // required: false — GolonganKelas/Jurusan punya default scope (where), tanpa ini include jadi INNER JOIN.
+  { model: GolonganKelas, as: 'golonganKelas', attributes: ['id', 'namaKelas'], required: false },
+  { model: Beasiswa, as: 'beasiswa', attributes: ['id', 'namaBeasiswa'], required: false },
+  { model: Jurusan.scope('withDeleted'), as: 'jurusan1', attributes: ['id', 'namaJurusan', 'jenjangPendidikan'], required: false },
+  { model: Jurusan.scope('withDeleted'), as: 'jurusan2', attributes: ['id', 'namaJurusan', 'jenjangPendidikan'], required: false },
+  { model: Jurusan.scope('withDeleted'), as: 'jurusan3', attributes: ['id', 'namaJurusan', 'jenjangPendidikan'], required: false },
 ];
 
 /**
@@ -21,6 +40,18 @@ const withDerivedStatus = (row) => {
     plain.statusKuliah = plain.peserta.statusKelulusan;
   }
   return plain;
+};
+
+/** withDerivedStatus + Formulir Pendaftaran / Kelengkapan Persyaratan dari dokumen yang diupload peserta. */
+const withDerivedRows = async (rows) => {
+  const plains = rows.map(withDerivedStatus);
+  const status = await hitungStatusDokumen(plains.map((p) => p.pesertaId));
+  return plains.map((p) => {
+    const s = p.pesertaId ? status.get(p.pesertaId) : null;
+    if (!s) return p;
+    // dokumen*Lengkap: warna ikon tombol Dokumen Pendaftaran / Dokumen Pendaftaran 2 di menu Peserta.
+    return { ...p, ...flagDokumen(s, p.skemaPembiayaan), dokumenUmumLengkap: s.umum, dokumenBeasiswaLengkap: s.beasiswa };
+  });
 };
 
 /**
@@ -67,17 +98,27 @@ const listCalonMahasiswa = async (query) => {
   if (query.gelombangId) {
     where.gelombangId = query.gelombangId;
   }
+  // Jurusan = nama prodi pilihan (unik per nama; master jurusan punya varian per golongan kelas).
+  if (query.prodi) {
+    where.prodi = query.prodi;
+  }
+  // Tahun Ajaran PMB = tahun gelombang pendaftar; golongan kelas = kelas perkuliahan akun peserta.
+  const include = includeRelations.map((r) => {
+    if (r.as === 'gelombang' && query.tahunPmbId) return { ...r, where: { tahunPmbId: Number(query.tahunPmbId) }, required: true };
+    if (r.as === 'peserta' && query.golonganKelasId) return { ...r, where: { golonganKelasId: Number(query.golonganKelasId) }, required: true };
+    return r;
+  });
 
   const { rows, count } = await CalonMahasiswa.findAndCountAll({
     where,
-    include: includeRelations,
+    include,
     limit,
     offset,
     order: resolveOrder(query, SORTABLE_COLUMNS),
     subQuery: false,
     distinct: true,
   });
-  return { data: rows.map(withDerivedStatus), meta: getPagingMeta(count, page, limit) };
+  return { data: await withDerivedRows(rows), meta: getPagingMeta(count, page, limit) };
 };
 
 const getCalonMahasiswaByIdRaw = async (id) => {
@@ -86,11 +127,12 @@ const getCalonMahasiswaByIdRaw = async (id) => {
   return calonMahasiswa;
 };
 
-const getCalonMahasiswaById = async (id) => withDerivedStatus(await getCalonMahasiswaByIdRaw(id));
+const getCalonMahasiswaById = async (id) => (await withDerivedRows([await getCalonMahasiswaByIdRaw(id)]))[0];
 
 const createCalonMahasiswa = async (payload, actorId) => {
   const finalPayload = await syncDerivedStatusOnWrite(payload);
   const calonMahasiswa = await CalonMahasiswa.create({ ...finalPayload, createdBy: actorId, updatedBy: actorId });
+  await syncFlagDokumen(calonMahasiswa.pesertaId);
   return getCalonMahasiswaById(calonMahasiswa.id);
 };
 
@@ -98,12 +140,165 @@ const updateCalonMahasiswa = async (id, payload, actorId) => {
   const calonMahasiswa = await getCalonMahasiswaByIdRaw(id);
   const finalPayload = await syncDerivedStatusOnWrite({ pesertaId: calonMahasiswa.pesertaId, ...payload });
   await calonMahasiswa.update({ ...finalPayload, updatedBy: actorId });
+  await syncFlagDokumen(calonMahasiswa.pesertaId);
   return getCalonMahasiswaById(id);
 };
 
 const deleteCalonMahasiswa = async (id) => {
   const calonMahasiswa = await getCalonMahasiswaByIdRaw(id);
   await calonMahasiswa.destroy();
+};
+
+/**
+ * Simpan Data Pendidikan dari menu Peserta. Nama asal sekolah disimpan di baris ini (dan akun peserta bila ditautkan);
+ * jurusan / tahun lulus / pengelolaan / alamat sekolah / NISN disimpan di biodata peserta, jadi butuh akun peserta
+ * yang sudah memiliki biodata.
+ */
+const savePendidikan = async (id, { asalSekolah, ...pendidikan }, actorId) => {
+  const calon = await getCalonMahasiswaByIdRaw(id);
+  const adaIsian = Object.values(pendidikan).some((v) => v);
+  if (!calon.pesertaId && adaIsian) {
+    throw new ApiError(400, 'Data ini belum ditautkan ke akun peserta. Hanya nama asal sekolah yang bisa disimpan.');
+  }
+  const isian = Object.fromEntries(Object.entries(pendidikan).map(([k, v]) => [k, v || null]));
+  await sequelize.transaction(async (transaction) => {
+    await calon.update({ asalSekolah, updatedBy: actorId }, { transaction });
+    if (!calon.pesertaId) return;
+    await Peserta.update({ asalSekolah }, { where: { id: calon.pesertaId }, transaction });
+    const biodata = await PesertaBiodata.findOne({ where: { pesertaId: calon.pesertaId }, transaction });
+    // Biodata belum ada: dibuat dengan data pendidikan saja (biodata pribadi dilengkapi peserta / admin nanti).
+    if (biodata) await biodata.update(isian, { transaction });
+    else if (adaIsian) await PesertaBiodata.create({ ...isian, pesertaId: calon.pesertaId, isAgree: false, isLocked: false }, { transaction });
+  });
+  return getCalonMahasiswaById(id);
+};
+
+/**
+ * Simpan popup Sumber Informasi (menu Data Calon Mahasiswa). Ditolak bila data sedang terkunci. Sumber informasi baris
+ * yang tertaut ke akun peserta ikut disimpan ke peserta (pilihan saat mendaftar) supaya statistik konsisten.
+ */
+const saveSumberInformasi = async (id, { sumberInformasiId, keteranganSumber, kodeUnik }, actorId) => {
+  const calon = await getCalonMahasiswaByIdRaw(id);
+  if (calon.sumberTerkunci) throw new ApiError(400, 'Data sumber informasi terkunci. Buka kunci data terlebih dahulu.');
+  if (sumberInformasiId && !(await SumberInformasi.findByPk(sumberInformasiId))) throw new ApiError(400, 'Sumber informasi tidak ditemukan');
+  await sequelize.transaction(async (transaction) => {
+    await calon.update({ sumberInformasiId: sumberInformasiId || null, keteranganSumber: keteranganSumber || null, kodeUnik: kodeUnik || null, updatedBy: actorId }, { transaction });
+    if (calon.pesertaId && sumberInformasiId) await Peserta.update({ sumberInformasiId }, { where: { id: calon.pesertaId }, transaction });
+  });
+  return getCalonMahasiswaById(id);
+};
+
+/** Kunci / buka kunci data sumber informasi (terkunci = hanya bisa dibaca). */
+const setKunciSumber = async (id, terkunci, actorId) => {
+  const calon = await getCalonMahasiswaByIdRaw(id);
+  await calon.update({ sumberTerkunci: !!terkunci, updatedBy: actorId });
+  return getCalonMahasiswaById(id);
+};
+
+/**
+ * Simpan popup Sumber Informasi 2: kelas perkuliahan, skema pembayaran (beasiswa; kosong = mandiri), ukuran almamater,
+ * gelombang, jurusan pilihan 1–3. Ditolak bila terkunci. Jurusan 1 menjadi prodi baris ini; baris yang tertaut ke akun
+ * peserta ikut menyimpan kelas, jurusan 1, dan beasiswa ke peserta supaya pilihan pendaftaran tetap sama.
+ */
+const saveDataPmb = async (id, payload, actorId) => {
+  const calon = await getCalonMahasiswaByIdRaw(id);
+  if (calon.dataPmbTerkunci) throw new ApiError(400, 'Data pendaftaran terkunci. Buka kunci data terlebih dahulu.');
+  const { golonganKelasId, beasiswaId, ukuranAlmamater, gelombangId, jurusan1Id, jurusan2Id, jurusan3Id } = payload;
+  if (golonganKelasId && !(await GolonganKelas.findByPk(golonganKelasId))) throw new ApiError(400, 'Kelas perkuliahan tidak ditemukan');
+  if (beasiswaId && !(await Beasiswa.findByPk(beasiswaId))) throw new ApiError(400, 'Beasiswa tidak ditemukan');
+  if (gelombangId && !(await Gelombang.findByPk(gelombangId))) throw new ApiError(400, 'Gelombang tidak ditemukan');
+  const jurusanIds = [jurusan1Id, jurusan2Id, jurusan3Id].filter(Boolean);
+  if (new Set(jurusanIds).size !== jurusanIds.length) throw new ApiError(400, 'Jurusan 1, 2, dan 3 tidak boleh sama');
+  const jurusanList = jurusanIds.length ? await Jurusan.findAll({ where: { id: jurusanIds } }) : [];
+  if (jurusanList.length !== jurusanIds.length) throw new ApiError(400, 'Jurusan tidak ditemukan');
+  if (golonganKelasId && jurusanList.some((j) => j.golonganKelasId !== golonganKelasId)) {
+    throw new ApiError(400, 'Jurusan harus sesuai kelas perkuliahan yang dipilih');
+  }
+  const jurusan1 = jurusanList.find((j) => j.id === jurusan1Id);
+
+  await sequelize.transaction(async (transaction) => {
+    await calon.update(
+      {
+        golonganKelasId: golonganKelasId || null,
+        beasiswaId: beasiswaId || null,
+        skemaPembiayaan: beasiswaId ? 'beasiswa' : 'mandiri',
+        ukuranAlmamater: ukuranAlmamater || null,
+        gelombangId: gelombangId || null,
+        jurusan1Id: jurusan1Id || null,
+        jurusan2Id: jurusan2Id || null,
+        jurusan3Id: jurusan3Id || null,
+        ...(jurusan1 ? { prodi: jurusan1.namaJurusan } : {}),
+        updatedBy: actorId,
+      },
+      { transaction }
+    );
+    if (calon.pesertaId) {
+      const pesertaUpdate = { beasiswaId: beasiswaId || null };
+      if (golonganKelasId && jurusan1) Object.assign(pesertaUpdate, { golonganKelasId, jurusanId: jurusan1.id });
+      await Peserta.update(pesertaUpdate, { where: { id: calon.pesertaId }, transaction });
+    }
+  });
+  // Skema pembiayaan bisa berubah → Kelengkapan Persyaratan ikut dihitung ulang.
+  await syncFlagDokumen(calon.pesertaId);
+  return getCalonMahasiswaById(id);
+};
+
+/** Kunci / buka kunci data popup Sumber Informasi 2 (terkunci = hanya bisa dibaca). */
+const setKunciDataPmb = async (id, terkunci, actorId) => {
+  const calon = await getCalonMahasiswaByIdRaw(id);
+  await calon.update({ dataPmbTerkunci: !!terkunci, updatedBy: actorId });
+  return getCalonMahasiswaById(id);
+};
+
+/**
+ * Portal peserta (halaman Sumber Informasi 2): isian popup Sumber Informasi 2 milik peserta yang login + opsi pilihannya.
+ * Isian kosong diambil dari pilihan saat mendaftar (kelas, jurusan 1, beasiswa) — sama seperti popup admin.
+ */
+const getDataPmbPeserta = async (pesertaId) => {
+  const peserta = await Peserta.findByPk(pesertaId);
+  if (!peserta) throw new ApiError(404, 'Peserta not found');
+  const calon = await CalonMahasiswa.findOne({ where: { pesertaId }, order: [['id', 'ASC']] });
+  const [kelas, beasiswa, gelombang, ukuran, jurusan] = await Promise.all([
+    GolonganKelas.findAll({ attributes: ['id', 'namaKelas'], order: [['id', 'ASC']] }),
+    Beasiswa.findAll({ where: { isActive: true }, attributes: ['id', 'namaBeasiswa'], order: [['orderNumber', 'ASC']] }),
+    Gelombang.findAll({ where: peserta.tahunPmbId ? { tahunPmbId: peserta.tahunPmbId } : {}, attributes: ['id', 'namaGelombang'], order: [['startDate', 'ASC']] }),
+    UkuranAlmamater.findAll({ attributes: ['id', 'ukuran'], order: [['id', 'ASC']] }),
+    Jurusan.findAll({ attributes: ['id', 'namaJurusan', 'jenjangPendidikan', 'golonganKelasId'], order: [['namaJurusan', 'ASC']] }),
+  ]);
+  return {
+    terkunci: !!calon?.dataPmbTerkunci,
+    // Sudah pernah disimpan (bukan sekadar isian awal dari pilihan saat mendaftar) → centang di menu peserta.
+    tersimpan: !!(calon?.golonganKelasId && calon?.jurusan1Id),
+    golonganKelasId: calon?.golonganKelasId ?? peserta.golonganKelasId,
+    beasiswaId: calon?.beasiswaId ?? peserta.beasiswaId,
+    ukuranAlmamater: calon?.ukuranAlmamater ?? null,
+    gelombangId: calon?.gelombangId ?? null,
+    jurusan1Id: calon?.jurusan1Id ?? peserta.jurusanId,
+    jurusan2Id: calon?.jurusan2Id ?? null,
+    jurusan3Id: calon?.jurusan3Id ?? null,
+    opsi: { kelas, beasiswa, gelombang, ukuran, jurusan },
+  };
+};
+
+/** Simpan Sumber Informasi 2 dari portal peserta. Belum ada baris di menu Peserta → dibuat & ditautkan ke akun ini. */
+const saveDataPmbPeserta = async (pesertaId, payload) => {
+  let calon = await CalonMahasiswa.findOne({ where: { pesertaId }, order: [['id', 'ASC']] });
+  if (!calon) {
+    const peserta = await Peserta.findByPk(pesertaId, { include: [{ model: Jurusan.scope('withDeleted'), as: 'jurusan', required: false }] });
+    if (!peserta) throw new ApiError(404, 'Peserta not found');
+    calon = await CalonMahasiswa.create(
+      await syncDerivedStatusOnWrite({
+        pesertaId,
+        nama: peserta.namaLengkap,
+        asalSekolah: peserta.asalSekolah,
+        prodi: peserta.jurusan?.namaJurusan ?? '-',
+        noTelepon: peserta.noTelepon,
+        sumberInformasiId: peserta.sumberInformasiId,
+      })
+    );
+  }
+  await saveDataPmb(calon.id, payload, null);
+  return getDataPmbPeserta(pesertaId);
 };
 
 const getStats = async (query = {}) => {
@@ -135,6 +330,13 @@ module.exports = {
   createCalonMahasiswa,
   updateCalonMahasiswa,
   deleteCalonMahasiswa,
+  savePendidikan,
+  saveSumberInformasi,
+  setKunciSumber,
+  saveDataPmb,
+  setKunciDataPmb,
+  getDataPmbPeserta,
+  saveDataPmbPeserta,
   getStats,
   listPublicCalonMahasiswa,
   getPublicStats,

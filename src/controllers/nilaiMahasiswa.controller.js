@@ -1,6 +1,8 @@
 const catchAsync = require('../utils/catchAsync');
 const sendResponse = require('../utils/ApiResponse');
 const nilaiMahasiswaService = require('../services/nilaiMahasiswa.service');
+const nilaiImportService = require('../services/nilaiImport.service');
+const { sendWorkbook } = require('../utils/excel');
 
 const list = catchAsync(async (req, res) => {
   const { data, meta } = await nilaiMahasiswaService.searchMahasiswa(req.query);
@@ -27,4 +29,14 @@ const updateEntry = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'Nilai updated', data });
 });
 
-module.exports = { list, detail, semesterSummary, listEntries, updateEntry };
+// Import nilai format "Nilai" PDDikti Feeder (lihat nilaiImport.service.js).
+const importExcel = catchAsync(async (req, res) => {
+  const data = await nilaiImportService.importNilaiMahasiswa(req.body.file);
+  sendResponse(res, 200, { message: 'Import nilai selesai', data });
+});
+
+const importTemplate = catchAsync(async (req, res) => {
+  await sendWorkbook(res, nilaiImportService.exportTemplateNilai(), 'template-import-nilai.xlsx');
+});
+
+module.exports = { list, detail, semesterSummary, listEntries, updateEntry, importExcel, importTemplate };

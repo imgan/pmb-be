@@ -21,6 +21,12 @@ module.exports = (sequelize, DataTypes) => {
           return value === null ? null : Number(value);
         },
       },
+      // Keringanan dihitung untuk syarat KRS / UTS / UAS (UAS = syarat akhir semester: UAS, nilai, KHS).
+      berlakuKrs: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+      berlakuUts: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+      berlakuUas: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+      // Lewat tanggal ini keringanan tidak dihitung lagi (null = tanpa batas).
+      sampaiTanggal: { type: DataTypes.DATEONLY, allowNull: true },
       alasan: { type: DataTypes.TEXT, allowNull: true },
       status: {
         type: DataTypes.ENUM('DIAJUKAN', 'DISETUJUI', 'DITOLAK'),

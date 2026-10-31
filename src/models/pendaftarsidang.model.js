@@ -26,6 +26,8 @@ module.exports = (sequelize, DataTypes) => {
     PendaftarSidang.belongsTo(models.JadwalSidang, { foreignKey: 'jadwalSidangId', as: 'jadwalSidang' });
     PendaftarSidang.belongsTo(models.Dosen, { foreignKey: 'pembimbing1Id', as: 'pembimbing1' });
     PendaftarSidang.belongsTo(models.Dosen, { foreignKey: 'pembimbing2Id', as: 'pembimbing2' });
+    PendaftarSidang.hasMany(models.NilaiSidang, { foreignKey: 'pendaftarSidangId', as: 'nilaiSidangList' });
+    PendaftarSidang.hasMany(models.KoreksiSidang, { foreignKey: 'pendaftarSidangId', as: 'koreksiSidangList' });
     PendaftarSidang.belongsTo(models.User, { foreignKey: 'createdBy', as: 'creator' });
     PendaftarSidang.belongsTo(models.User, { foreignKey: 'updatedBy', as: 'updater' });
   };

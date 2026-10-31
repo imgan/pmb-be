@@ -2,9 +2,18 @@ const { Op, fn, col, literal } = require('sequelize');
 const { Yudisium, Mahasiswa, Jurusan, Krs, NilaiMahasiswa } = require('../models');
 const { GRADE_BOBOT } = require('../utils/gradeScale');
 const { predikatKelulusan } = require('../utils/predikat');
+const { loadKelompokKode, pilihNilaiEfektif } = require('../utils/ekuivalensiMatkul');
 
 const getIpk = async (mahasiswaId) => {
-  const nilaiList = await NilaiMahasiswa.findAll({ where: { mahasiswaId }, attributes: ['sks', 'grade'], raw: true });
+  const [nilaiSemua, kelompokOf] = await Promise.all([
+    NilaiMahasiswa.findAll({
+      where: { mahasiswaId },
+      attributes: ['mahasiswaId', 'kodeMataKuliah', 'semester', 'sks', 'grade'],
+      raw: true,
+    }),
+    loadKelompokKode(),
+  ]);
+  const nilaiList = pilihNilaiEfektif(nilaiSemua, kelompokOf);
   const totalSks = nilaiList.reduce((sum, n) => sum + n.sks, 0);
   const totalBobot = nilaiList.reduce((sum, n) => sum + (GRADE_BOBOT[n.grade] ?? 0) * n.sks, 0);
   return totalSks > 0 ? Number((totalBobot / totalSks).toFixed(2)) : 0;
@@ -35,7 +44,7 @@ const listLulusan = async ({ tahun, jurusanId } = {}) => {
         model: Mahasiswa,
         as: 'mahasiswa',
         required: true,
-        where: Object.keys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
+        where: Reflect.ownKeys(mahasiswaWhere).length ? mahasiswaWhere : undefined,
         include: [{ model: Jurusan, as: 'jurusan', attributes: ['id', 'namaJurusan'] }],
       },
     ],

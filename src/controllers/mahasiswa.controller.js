@@ -18,6 +18,11 @@ const update = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'Mahasiswa updated', data });
 });
 
+const resetPassword = catchAsync(async (req, res) => {
+  const data = await mahasiswaService.resetPasswordMahasiswa(req.params.id);
+  sendResponse(res, 200, { message: `Password ${data.namaLengkap} direset ke NIM`, data });
+});
+
 const remove = catchAsync(async (req, res) => {
   await mahasiswaService.deleteMahasiswa(req.params.id);
   sendResponse(res, 200, { message: 'Mahasiswa deleted' });
@@ -55,7 +60,10 @@ const exportExcel = catchAsync(async (req, res) => {
 
 const importExcel = catchAsync(async (req, res) => {
   const result = await mahasiswaService.importMahasiswa(req.body.file, req.user.id);
-  sendResponse(res, 200, { message: 'Import mahasiswa selesai', data: result });
+  sendResponse(res, 200, {
+    message: `Import mahasiswa selesai: ${result.createdCount} mahasiswa baru, ${result.updatedCount} diperbarui`,
+    data: result,
+  });
 });
 
 const importTemplate = catchAsync(async (req, res) => {
@@ -64,6 +72,7 @@ const importTemplate = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  resetPassword,
   list,
   detail,
   update,

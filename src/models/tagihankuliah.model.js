@@ -26,7 +26,29 @@ module.exports = (sequelize, DataTypes) => {
       biayaBpp: decimalField('biayaBpp'),
       biayaSpp: decimalField('biayaSpp'),
       potongan: decimalField('potongan'),
+      // Tagihan import: Total Tagihan dari file keuangan sebelum dipotong. totalTagihan = tagihanAwal - potongan
+      // (lihat utils/potonganTagihan.js); null untuk tagihan hasil generate lama.
+      tagihanAwal: {
+        type: DataTypes.DECIMAL(14, 2),
+        allowNull: true,
+        get() {
+          const value = this.getDataValue('tagihanAwal');
+          return value === null ? null : Number(value);
+        },
+      },
       totalTagihan: decimalField('totalTagihan'),
+      // Hasil import keuangan: total sudah dibayar per tanggal import (pembayaran kasir yang dicatat
+      // setelah importedAt ditambahkan di atasnya — lihat utils/tagihanSaldo.js) dan tunggakan
+      // semester sebelumnya yang disimpan TERPISAH dari sisa semester ini.
+      totalBayarImport: decimalField('totalBayarImport'),
+      tunggakan: decimalField('tunggakan'),
+      tanggalJatuhTempo: { type: DataTypes.DATEONLY, allowNull: true },
+      // Nomor VA bank tujuan pembayaran tagihan ini (ditampilkan di portal mahasiswa).
+      noVirtualAccount: { type: DataTypes.STRING(30), allowNull: true },
+      keterangan: { type: DataTypes.STRING(255), allowNull: true },
+      sumber: { type: DataTypes.ENUM('GENERATE', 'IMPORT'), allowNull: false, defaultValue: 'IMPORT' },
+      importBatchId: { type: DataTypes.INTEGER, allowNull: true },
+      importedAt: { type: DataTypes.DATE, allowNull: true },
       createdBy: { type: DataTypes.INTEGER, allowNull: true },
       updatedBy: { type: DataTypes.INTEGER, allowNull: true },
     },
@@ -41,6 +63,8 @@ module.exports = (sequelize, DataTypes) => {
     TagihanKuliah.belongsTo(models.Mahasiswa, { foreignKey: 'mahasiswaId', as: 'mahasiswa' });
     TagihanKuliah.belongsTo(models.TahunAjaran, { foreignKey: 'tahunAjaranId', as: 'tahunAjaran' });
     TagihanKuliah.hasMany(models.PembayaranKuliah, { foreignKey: 'tagihanKuliahId', as: 'pembayaranList' });
+    TagihanKuliah.hasMany(models.TagihanCicilan, { foreignKey: 'tagihanKuliahId', as: 'cicilanList' });
+    TagihanKuliah.belongsTo(models.TagihanImportBatch, { foreignKey: 'importBatchId', as: 'importBatch' });
     TagihanKuliah.belongsTo(models.User, { foreignKey: 'createdBy', as: 'creator' });
     TagihanKuliah.belongsTo(models.User, { foreignKey: 'updatedBy', as: 'updater' });
   };

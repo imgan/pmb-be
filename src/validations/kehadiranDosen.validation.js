@@ -7,6 +7,8 @@ const createKehadiranDosen = Joi.object({
   dosenId: Joi.number().integer().required(),
   tanggalRealisasi: Joi.date().required(),
   status: Joi.string().valid(...STATUS_OPTIONS),
+  // Uraian materi (Pokok Bahasan) & keterangan (Rincian) -> kolom cetak Realisasi Dosen Mengajar.
+  uraian: Joi.string().allow('', null),
   keterangan: Joi.string().allow('', null),
 });
 
@@ -15,6 +17,8 @@ const updateKehadiranDosen = Joi.object({
   dosenId: Joi.number().integer(),
   tanggalRealisasi: Joi.date(),
   status: Joi.string().valid(...STATUS_OPTIONS),
+  // Uraian materi (Pokok Bahasan) & keterangan (Rincian) -> kolom cetak Realisasi Dosen Mengajar.
+  uraian: Joi.string().allow('', null),
   keterangan: Joi.string().allow('', null),
 }).min(1);
 

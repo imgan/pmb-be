@@ -29,6 +29,10 @@ router.post(
 );
 
 router.get('/export', authorize(MENU.KEUANGAN_TUNGGAKAN_MAHASISWA_MANAGEMENT, ACTION.READ), controller.exportExcel);
+// Tunggakan otomatis: sisa tagihan semester sebelum tahun ajaran aktif yang belum lunas.
+router.get('/otomatis', authorize(MENU.KEUANGAN_TUNGGAKAN_MAHASISWA_MANAGEMENT, ACTION.READ), controller.listOtomatis);
+router.get('/otomatis/export', authorize(MENU.KEUANGAN_TUNGGAKAN_MAHASISWA_MANAGEMENT, ACTION.READ), controller.exportOtomatis);
+router.get('/riwayat-pembayaran/:mahasiswaId', authorize(MENU.KEUANGAN_TUNGGAKAN_MAHASISWA_MANAGEMENT, ACTION.READ), controller.riwayatPembayaran);
 router.get(
   '/import-template',
   authorize(MENU.KEUANGAN_TUNGGAKAN_MAHASISWA_MANAGEMENT, ACTION.READ),

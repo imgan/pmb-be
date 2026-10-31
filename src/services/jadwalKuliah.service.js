@@ -1,6 +1,9 @@
 const { Op } = require('sequelize');
-const { JadwalKuliah, Dosen, TahunAjaran, MataKuliah } = require('../models');
+const { JadwalKuliah, JadwalKuliahDosenPengampu, Dosen, TahunAjaran, MataKuliah, Kurikulum, Jurusan, KrsDetail, sequelize } = require('../models');
+const matakuliahAktifService = require('./matakuliahAktif.service');
+const { jadwalIdsForProdi, kodeProdiMahasiswa } = require('../utils/prodiJadwal');
 const ApiError = require('../utils/ApiError');
+const { formatTahunAjaran } = require('../utils/tahunAjaran');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
 const { buildWorkbook, parseWorkbookFromBase64, cellString, cellBoolean } = require('../utils/excel');
@@ -14,21 +17,49 @@ const HARI_OPTIONS = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
  */
 const includeRelations = [
   { model: Dosen, as: 'dosenKordinator', required: false },
-  { model: Dosen, as: 'dosenPengampu', through: { attributes: [] }, required: false },
+  { model: Dosen, as: 'dosenPengampu', through: { attributes: ['sks'] }, required: false },
   { model: TahunAjaran, as: 'tahunAjaran', required: false },
-  { model: MataKuliah, as: 'mataKuliah', required: false },
+  {
+    model: MataKuliah,
+    as: 'mataKuliah',
+    required: false,
+    include: [
+      {
+        model: Kurikulum,
+        as: 'kurikulum',
+        attributes: ['id', 'nama', 'jurusanId', 'tahunKurikulum'],
+        required: false,
+        include: [{ model: Jurusan, as: 'jurusan', attributes: ['id', 'namaJurusan', 'kodeProdi'], required: false }],
+      },
+    ],
+  },
 ];
 
 /**
- * KelasKuliah (jadwal_kuliah) keeps its own kodeMataKuliah/namaMataKuliah/sks columns for
- * backward compatibility with existing reports/exports, but when mataKuliahId is set it's
- * now the source of truth — sync the denormalized fields from it so they can't drift apart.
+ * Jadwal kuliah menunjuk satu mata kuliah (mataKuliahId, milik satu kurikulum). Kolom kode/nama/SKS
+ * di jadwal_kuliah tetap disimpan (laporan/ekspor lama) dan selalu disalin dari mata kuliahnya.
+ * Saat jadwal dibuat atau mata kuliahnya diganti, mata kuliah wajib aktif (menu Matakuliah Aktif) pada
+ * tahun akademik + semester jadwal ("Aktif Semester").
  */
-const syncFromMataKuliah = async (payload) => {
-  if (!payload.mataKuliahId) return payload;
-  const mk = await MataKuliah.findByPk(payload.mataKuliahId);
-  if (!mk) throw new ApiError(400, 'Mata kuliah not found');
-  return { ...payload, kodeMataKuliah: mk.kodeMk, namaMataKuliah: mk.namaMk, sks: mk.sks };
+const syncMataKuliah = async (payload, current = null) => {
+  const ganti = payload.mataKuliahId !== undefined && payload.mataKuliahId !== (current?.mataKuliahId ?? null);
+  if (!payload.mataKuliahId || (!ganti && current)) return payload;
+
+  const tahunAjaranId = payload.tahunAjaranId !== undefined ? payload.tahunAjaranId : current?.tahunAjaranId;
+  const semester = payload.semester !== undefined ? payload.semester : current?.semester;
+  const mk = await matakuliahAktifService.assertAktif(payload.mataKuliahId, tahunAjaranId, semester ?? null);
+  if (!mk) throw new ApiError(400, 'Mata kuliah tidak ditemukan');
+  return {
+    ...payload,
+    mataKuliahId: mk.id,
+    kodeMataKuliah: mk.kode,
+    namaMataKuliah: mk.mataKuliah,
+    sks: mk.sksTotal,
+    sksTeori: mk.sksTeori,
+    sksPraktik: mk.sksPraktek,
+    sksLab: mk.sksLab,
+    semester: semester ?? null,
+  };
 };
 
 const SORTABLE_COLUMNS = {
@@ -60,6 +91,17 @@ const listJadwalKuliah = async (query) => {
   if (query.tahunAjaranId) {
     where.tahunAjaranId = query.tahunAjaranId;
   }
+  // Pilihan kelas untuk KRS seorang mahasiswa: hanya kelas dari prodinya.
+  if (query.mahasiswaId) {
+    const ids = await jadwalIdsForProdi(await kodeProdiMahasiswa(Number(query.mahasiswaId)));
+    where.id = ids.length ? ids : [0];
+  }
+  // Filter prodi (Master Monitoring BAAK); digabung (irisan) dengan filter mahasiswaId bila ada.
+  if (query.kodeProdi) {
+    const ids = await jadwalIdsForProdi(query.kodeProdi);
+    const irisan = Array.isArray(where.id) ? where.id.filter((id) => ids.includes(id)) : ids;
+    where.id = irisan.length ? irisan : [0];
+  }
   if (query.semester) {
     // Banyak jadwal kuliah lama belum ditandai semester-nya (kolom nullable, sering kosong
     // di data existing) — kalau di-strict-match, mahasiswa/BAAK jadi tidak bisa memilih kelas
@@ -76,6 +118,20 @@ const listJadwalKuliah = async (query) => {
     subQuery: false,
     distinct: true,
   });
+  // withJumlahMahasiswa=true (Master Monitoring BAAK): jumlah mahasiswa yang mengambil kelas di KRS.
+  if (query.withJumlahMahasiswa === 'true' && rows.length) {
+    const counts = await KrsDetail.findAll({
+      attributes: ['jadwalKuliahId', [sequelize.fn('COUNT', sequelize.col('id')), 'jumlah']],
+      where: { jadwalKuliahId: rows.map((r) => r.id) },
+      group: ['jadwalKuliahId'],
+      raw: true,
+    });
+    const jumlahBy = new Map(counts.map((c) => [c.jadwalKuliahId, Number(c.jumlah)]));
+    return {
+      data: rows.map((r) => ({ ...r.toJSON(), jumlahMahasiswa: jumlahBy.get(r.id) ?? 0 })),
+      meta: getPagingMeta(count, page, limit),
+    };
+  }
   return { data: rows, meta: getPagingMeta(count, page, limit) };
 };
 
@@ -95,22 +151,123 @@ const getJadwalKuliahById = async (id) => {
   return jadwal;
 };
 
-const createJadwalKuliah = async (payload, actorId) => {
-  const { dosenPengampuIds = [], ...rest } = await syncFromMataKuliah(payload);
-  if (rest.sksTeori === undefined) rest.sksTeori = rest.sks ?? 0;
-  const jadwal = await JadwalKuliah.create({ ...rest, createdBy: actorId, updatedBy: actorId });
-  if (dosenPengampuIds.length) {
-    await jadwal.setDosenPengampu(dosenPengampuIds);
+const HARI_LABEL = { SENIN: 'Senin', SELASA: 'Selasa', RABU: 'Rabu', KAMIS: 'Kamis', JUMAT: 'Jumat', SABTU: 'Sabtu' };
+const normalizeRuangan = (ruangan) => (ruangan ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+// '&' dianggap 'dan' (mis. "Pancasila & Kewarganegaraan" = "Pancasila dan Kewarganegaraan").
+const normalizeNama = (nama) => (nama ?? '').replace(/&/g, ' dan ').trim().replace(/\s+/g, ' ').toLowerCase();
+// Ruang "virtual" (online / project) bukan ruangan fisik — tidak dicek bentrok ruangan.
+const isRuangVirtual = (key) => !key || /^(online|project|daring)\b/.test(key);
+
+/**
+ * Tolak jadwal yang bentrok dengan jadwal aktif lain di tahun ajaran yang sama: dianggap
+ * bentrok bila ada hari yang sama DAN jam ke- yang sama, lalu memakai ruangan yang sama atau
+ * dosen yang sama (dosen kordinator maupun pengampu, di kedua sisi). Jadwal nonaktif / tanpa
+ * hari / tanpa jam tidak dicek karena belum menempati slot waktu.
+ *
+ * Kelas gabungan: jadwal lain di slot yang sama dengan NAMA mata kuliah yang sama (kode boleh beda
+ * antar prodi, mis. "Pendidikan Agama" MKDU01 & MK101) dianggap satu kelas gabungan — dosen &
+ * ruangannya boleh sama. Ruang Online/Project tidak dicek bentrok ruangan.
+ */
+const assertTidakBentrok = async ({ id, tahunAjaranId, hari, jam, ruangan, isActive, dosenIds, namaMataKuliah }) => {
+  if (isActive === false || !hari?.length || jam === null || jam === undefined) return;
+
+  const others = await JadwalKuliah.findAll({
+    where: {
+      isActive: true,
+      jam,
+      tahunAjaranId: tahunAjaranId ?? null,
+      ...(id ? { id: { [Op.ne]: id } } : {}),
+    },
+    // Pengampu lewat unscoped Dosen: dosen yang sudah di-soft-delete tetap ikut dicek (masih terpasang di jadwal).
+    include: [{ model: Dosen.unscoped(), as: 'dosenPengampu', attributes: ['id'], through: { attributes: [] }, required: false }],
+  });
+
+  const ruanganKey = normalizeRuangan(ruangan);
+  const namaKey = normalizeNama(namaMataKuliah);
+  const dosenSet = new Set(dosenIds.filter(Boolean).map(Number));
+  const conflicts = [];
+
+  others.forEach((other) => {
+    const hariSama = (other.hari ?? []).filter((h) => hari.includes(h));
+    if (!hariSama.length) return;
+    if (namaKey && normalizeNama(other.namaMataKuliah) === namaKey) return; // kelas gabungan
+    const slot = `${hariSama.map((h) => HARI_LABEL[h] ?? h).join(', ')} jam ke-${jam}`;
+    const kelas = `kelas ${other.kelas} (${other.kodeMataKuliah} ${other.namaMataKuliah})`;
+
+    if (!isRuangVirtual(ruanganKey) && normalizeRuangan(other.ruangan) === ruanganKey) {
+      conflicts.push({ text: `Ruangan ${other.ruangan} sudah dipakai ${kelas} pada ${slot}.` });
+    }
+    const dosenLain = new Set([other.dosenKordinatorId, ...(other.dosenPengampu ?? []).map((d) => d.id)]);
+    [...dosenLain].filter((dosenId) => dosenSet.has(dosenId)).forEach((dosenId) => conflicts.push({ dosenId, kelas, slot }));
+  });
+  if (!conflicts.length) return;
+
+  const dosenIdsBentrok = [...new Set(conflicts.filter((c) => c.dosenId).map((c) => c.dosenId))];
+  const namaDosen = new Map(
+    (await Dosen.unscoped().findAll({ where: { id: dosenIdsBentrok }, attributes: ['id', 'namaLengkap'] })).map((d) => [d.id, d.namaLengkap])
+  );
+  const messages = conflicts.map((c) =>
+    c.text ?? `Dosen ${namaDosen.get(c.dosenId) ?? `#${c.dosenId}`} sudah mengajar ${c.kelas} pada ${c.slot}.`
+  );
+
+  if (messages.length) throw new ApiError(409, `Jadwal bentrok: ${messages.join(' ')}`);
+};
+
+/**
+ * Dosen pengampu bisa dikirim sebagai `dosenPengampu` ([{ dosenId, sks }], SKS per dosen) atau
+ * `dosenPengampuIds` (format lama, tanpa SKS). Hasilnya undefined kalau keduanya tidak dikirim.
+ */
+const normalizePengampu = ({ dosenPengampu, dosenPengampuIds, ...rest }) => {
+  let pengampu;
+  if (dosenPengampu !== undefined) pengampu = dosenPengampu.map((p) => ({ dosenId: p.dosenId, sks: p.sks ?? null }));
+  else if (dosenPengampuIds !== undefined) pengampu = dosenPengampuIds.map((dosenId) => ({ dosenId, sks: null }));
+  return { pengampu, rest };
+};
+
+const savePengampu = async (jadwalKuliahId, pengampu) => {
+  await JadwalKuliahDosenPengampu.destroy({ where: { jadwalKuliahId } });
+  if (pengampu.length) {
+    await JadwalKuliahDosenPengampu.bulkCreate(pengampu.map((p) => ({ jadwalKuliahId, dosenId: p.dosenId, sks: p.sks })));
   }
+};
+
+const createJadwalKuliah = async (payload, actorId) => {
+  const { pengampu = [], rest } = normalizePengampu(await syncMataKuliah(payload));
+  const dosenPengampuIds = pengampu.map((p) => p.dosenId);
+  if (rest.sksTeori === undefined) rest.sksTeori = rest.sks ?? 0;
+  await assertTidakBentrok({
+    tahunAjaranId: rest.tahunAjaranId,
+    hari: rest.hari,
+    jam: rest.jam,
+    ruangan: rest.ruangan,
+    isActive: rest.isActive,
+    dosenIds: [rest.dosenKordinatorId, ...dosenPengampuIds],
+    namaMataKuliah: rest.namaMataKuliah,
+  });
+  const jadwal = await JadwalKuliah.create({ ...rest, createdBy: actorId, updatedBy: actorId });
+  await savePengampu(jadwal.id, pengampu);
   return getJadwalKuliahById(jadwal.id);
 };
 
 const updateJadwalKuliah = async (id, payload, actorId) => {
   const jadwal = await getJadwalKuliahById(id);
-  const { dosenPengampuIds, ...rest } = await syncFromMataKuliah(payload);
+  const { pengampu, rest } = normalizePengampu(await syncMataKuliah(payload, jadwal));
+  const dosenPengampuIds = pengampu?.map((p) => p.dosenId);
+  // Field yang tidak dikirim memakai nilai tersimpan, supaya pengecekan bentrok memakai jadwal hasil akhirnya.
+  const pick = (key) => (rest[key] !== undefined ? rest[key] : jadwal[key]);
+  await assertTidakBentrok({
+    id: jadwal.id,
+    tahunAjaranId: pick('tahunAjaranId'),
+    hari: pick('hari'),
+    jam: pick('jam'),
+    ruangan: pick('ruangan'),
+    isActive: pick('isActive'),
+    dosenIds: [pick('dosenKordinatorId'), ...(dosenPengampuIds ?? (jadwal.dosenPengampu ?? []).map((d) => d.id))],
+    namaMataKuliah: pick('namaMataKuliah'),
+  });
   await jadwal.update({ ...rest, updatedBy: actorId });
-  if (dosenPengampuIds !== undefined) {
-    await jadwal.setDosenPengampu(dosenPengampuIds);
+  if (pengampu !== undefined) {
+    await savePengampu(jadwal.id, pengampu);
   }
   return getJadwalKuliahById(id);
 };
@@ -150,7 +307,7 @@ const exportJadwalKuliah = async () => {
     sksLab: j.sksLab,
     dosenKordinatorNidn: j.dosenKordinator?.nidn ?? '',
     dosenPengampuNidn: (j.dosenPengampu ?? []).map((d) => d.nidn).join(', '),
-    tahunAjaran: j.tahunAjaran?.nama ?? '',
+    tahunAjaran: formatTahunAjaran(j.tahunAjaran) ?? '',
     hari: (j.hari ?? []).join(', '),
     jam: j.jam,
     ruangan: j.ruangan,
@@ -171,7 +328,7 @@ const exportJadwalKuliahTemplate = () => {
     sksLab: 0,
     dosenKordinatorNidn: 'NIDN dosen (sesuai master data)',
     dosenPengampuNidn: 'NIDN dosen, pisahkan koma (opsional)',
-    tahunAjaran: '2026/2027 (informasi saja, tidak diproses saat import)',
+    tahunAjaran: '2026/2027 GANJIL (informasi saja, tidak diproses saat import)',
     hari: 'SENIN, RABU',
     jam: 1,
     ruangan: '4.01 A',
@@ -247,6 +404,16 @@ const importJadwalKuliah = async (fileBase64, actorId) => {
 
     try {
       let jadwal = await JadwalKuliah.findOne({ where: { kelas, kodeMataKuliah } });
+      await assertTidakBentrok({
+        id: jadwal?.id,
+        tahunAjaranId: jadwal?.tahunAjaranId ?? null,
+        hari: payload.hari,
+        jam: payload.jam,
+        ruangan: payload.ruangan,
+        isActive: payload.isActive,
+        dosenIds: [payload.dosenKordinatorId, ...pengampuDosen.map((d) => d.id)],
+        namaMataKuliah: payload.namaMataKuliah,
+      });
       if (jadwal) {
         await jadwal.update(payload);
       } else {

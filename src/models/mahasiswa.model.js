@@ -45,7 +45,8 @@ module.exports = (sequelize, DataTypes) => {
           'PUTUS_SEKOLAH',
           'WAFAT',
           'HILANG',
-          'LAINNYA'
+          'LAINNYA',
+          'MENUNGGU_UKOM'
         ),
         allowNull: true,
       },

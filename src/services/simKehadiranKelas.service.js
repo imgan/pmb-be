@@ -21,7 +21,7 @@ const listKehadiranKelas = async ({ tahun, semester } = {}) => {
     where: jadwalWhere,
     include: [
       { model: TahunAjaran, as: 'tahunAjaran', attributes: ['id', 'tahunMulai'], where: tahunAjaranWhere, required: true },
-      { model: MataKuliah, as: 'mataKuliah', attributes: ['id', 'kodeMk', 'namaMk'] },
+      { model: MataKuliah, as: 'mataKuliah', attributes: MataKuliah.ATTRS_RINGKAS },
     ],
     order: [['namaMataKuliah', 'ASC']],
   });

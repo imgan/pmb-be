@@ -1,4 +1,8 @@
 require('dotenv').config();
+// Jam lokal aplikasi = WIB, apa pun zona waktu servernya (server deploy biasanya UTC). Banyak catatan
+// memakai jam lokal server (mis. jam masuk/keluar start-stop kelas, tanggal hari ini), jadi tanpa ini
+// server UTC mencatat jam mundur 7 jam. Bisa ditimpa lewat TZ di .env.
+process.env.TZ = process.env.TZ || 'Asia/Jakarta';
 const app = require('./app');
 const { sequelize } = require('./models');
 

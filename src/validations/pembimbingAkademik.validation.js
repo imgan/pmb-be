@@ -12,4 +12,10 @@ const updatePembimbingAkademik = Joi.object({
   tanggalSk: Joi.date().allow(null),
 }).min(1);
 
-module.exports = { createPembimbingAkademik, updatePembimbingAkademik };
+// Atur mahasiswa bimbingan: id mahasiswa yang ditetapkan / dilepas dari pembimbing akademik ini.
+const setMahasiswaBimbingan = Joi.object({
+  tambah: Joi.array().items(Joi.number().integer()).default([]),
+  hapus: Joi.array().items(Joi.number().integer()).default([]),
+});
+
+module.exports = { createPembimbingAkademik, updatePembimbingAkademik, setMahasiswaBimbingan };

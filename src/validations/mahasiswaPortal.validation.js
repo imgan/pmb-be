@@ -26,4 +26,23 @@ const createSuratRequest = Joi.object({
   tanggalUjianSelesai: Joi.date().allow(null),
 });
 
-module.exports = { saveKrsDraft, createSuratRequest };
+// Satu isian EDOM = satu dosen pengajar pada satu kelas; skor 1-5 untuk setiap pertanyaan aktif.
+const submitEdom = Joi.object({
+  jadwalKuliahId: Joi.number().integer().required(),
+  dosenId: Joi.number().integer().required(),
+  jawaban: Joi.array()
+    .items(
+      // nilai = pilihan jawaban (master Angket Dosen); teks = jawaban open question.
+      Joi.object({
+        pertanyaanId: Joi.number().integer().required(),
+        nilai: Joi.number().integer().min(0).max(100).allow(null),
+        teks: Joi.string().max(2000).allow('', null),
+      })
+    )
+    .unique('pertanyaanId')
+    .min(1)
+    .required(),
+  saran: Joi.string().max(2000).allow('', null),
+});
+
+module.exports = { saveKrsDraft, createSuratRequest, submitEdom };

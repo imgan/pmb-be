@@ -141,7 +141,13 @@ router.post('/import', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.UPDATE), vali
  *       200:
  *         description: List of mahasiswa
  */
-const LIST_CODES = [MENU.MAHASISWA_MANAGEMENT, MENU.PRODI_MAHASISWA_KELUAR_MANAGEMENT];
+// Masa Studi (Prodi & BAAK) memakai list/detail/update mahasiswa untuk mengisi keterangan aktifitas.
+const LIST_CODES = [
+  MENU.MAHASISWA_MANAGEMENT,
+  MENU.PRODI_MAHASISWA_KELUAR_MANAGEMENT,
+  MENU.PRODI_HABIS_MASA_STUDI_MANAGEMENT,
+  MENU.BAAK_MASA_STUDI_MANAGEMENT,
+];
 
 router.get('/', authorize(LIST_CODES, ACTION.READ), mahasiswaController.list);
 
@@ -187,6 +193,21 @@ router.get('/', authorize(LIST_CODES, ACTION.READ), mahasiswaController.list);
 router.get('/:id', authorize(LIST_CODES, ACTION.READ), mahasiswaController.detail);
 router.put('/:id', authorize(LIST_CODES, ACTION.UPDATE), validate(updateMahasiswa), mahasiswaController.update);
 router.delete('/:id', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.DELETE), mahasiswaController.remove);
+
+/**
+ * @swagger
+ * /mahasiswa/{id}/reset-password:
+ *   post:
+ *     summary: Reset password portal mahasiswa ke NIM-nya (untuk mahasiswa yang lupa password)
+ *     tags: [Mahasiswa]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: Password direset ke NIM
+ */
+router.post('/:id/reset-password', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.UPDATE), mahasiswaController.resetPassword);
 
 /**
  * @swagger

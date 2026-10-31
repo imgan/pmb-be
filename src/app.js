@@ -13,7 +13,8 @@ const app = express();
 const BODY_LIMIT = process.env.BODY_LIMIT || '15mb';
 
 app.use(helmet());
-app.use(cors());
+// Content-Disposition di-expose supaya frontend bisa membaca nama file PDF dari server.
+app.use(cors({ exposedHeaders: ['Content-Disposition'] }));
 app.use(express.json({ limit: BODY_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
 
@@ -25,6 +26,8 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get('/api-docs.json', (req, res) => res.json(swaggerSpec));
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+// Halaman utama domain backend: info singkat (sebelumnya "Route / not found").
+app.get('/', (req, res) => res.json({ success: true, message: 'SMART API - Sistem Manajemen Akademik Terintegrasi', status: 'ok', api: '/api', docs: '/api-docs' }));
 
 app.use('/api', auditLogMiddleware, routes);
 

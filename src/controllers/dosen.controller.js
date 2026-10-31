@@ -9,7 +9,7 @@ const list = catchAsync(async (req, res) => {
 });
 
 const stats = catchAsync(async (req, res) => {
-  const data = await dosenService.getDosenStats();
+  const data = await dosenService.getDosenStats(req.query);
   sendResponse(res, 200, { message: 'Dosen stats fetched', data });
 });
 

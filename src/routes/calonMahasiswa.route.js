@@ -3,7 +3,7 @@ const calonMahasiswaController = require('../controllers/calonMahasiswa.controll
 const authenticate = require('../middlewares/auth.middleware');
 const authorize = require('../middlewares/permission.middleware');
 const validate = require('../middlewares/validate.middleware');
-const { createCalonMahasiswa, updateCalonMahasiswa } = require('../validations/calonMahasiswa.validation');
+const { createCalonMahasiswa, updateCalonMahasiswa, savePendidikan, saveSumberInformasi, kunciSumber, saveDataPmb } = require('../validations/calonMahasiswa.validation');
 const MENU = require('../constants/menuCodes');
 const ACTION = require('../constants/actions');
 
@@ -112,5 +112,23 @@ router.put(
   calonMahasiswaController.update
 );
 router.delete('/:id', authorize(MENU.CALON_MAHASISWA_MANAGEMENT, ACTION.DELETE), calonMahasiswaController.remove);
+// Popup Data Pendidikan: nama asal sekolah + data pendidikan di biodata peserta tertaut.
+router.put(
+  '/:id/pendidikan',
+  authorize(MENU.CALON_MAHASISWA_MANAGEMENT, ACTION.UPDATE),
+  validate(savePendidikan),
+  calonMahasiswaController.savePendidikan
+);
+// Popup Sumber Informasi: sumber info kampus, keterangan, kode unik + kunci data.
+router.put(
+  '/:id/sumber-informasi',
+  authorize(MENU.CALON_MAHASISWA_MANAGEMENT, ACTION.UPDATE),
+  validate(saveSumberInformasi),
+  calonMahasiswaController.saveSumberInformasi
+);
+router.patch('/:id/sumber-informasi/kunci', authorize(MENU.CALON_MAHASISWA_MANAGEMENT, ACTION.UPDATE), validate(kunciSumber), calonMahasiswaController.kunciSumber);
+// Popup Sumber Informasi 2: kelas perkuliahan, skema pembayaran, ukuran almamater, gelombang, jurusan 1–3 + kunci data.
+router.put('/:id/data-pmb', authorize(MENU.CALON_MAHASISWA_MANAGEMENT, ACTION.UPDATE), validate(saveDataPmb), calonMahasiswaController.saveDataPmb);
+router.patch('/:id/data-pmb/kunci', authorize(MENU.CALON_MAHASISWA_MANAGEMENT, ACTION.UPDATE), validate(kunciSumber), calonMahasiswaController.kunciDataPmb);
 
 module.exports = router;

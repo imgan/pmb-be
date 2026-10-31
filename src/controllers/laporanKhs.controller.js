@@ -14,13 +14,16 @@ const cetakPdf = catchAsync(async (req, res) => {
   const { semester } = req.query;
   if (!semester) throw new ApiError(400, 'Semester wajib dipilih');
 
+  const semua = semester === 'semua';
   const [data, kampus] = await Promise.all([
-    laporanKhsService.getKhsData(req.params.mahasiswaId, semester),
+    semua ? laporanKhsService.getKhsSemuaSemester(req.params.mahasiswaId) : laporanKhsService.getKhsData(req.params.mahasiswaId, semester),
     kampusService.getKampus(),
   ]);
+  if (semua && !data.length) throw new ApiError(404, 'Mahasiswa ini belum punya nilai');
 
   const doc = buildLaporanKhsPdf(data, kampus);
-  const filename = `khs-${data.mahasiswa.nim}-semester-${semester}.pdf`;
+  const nim = semua ? data[0].mahasiswa.nim : data.mahasiswa.nim;
+  const filename = `khs-${nim}-${semua ? 'semua-semester' : `semester-${semester}`}.pdf`;
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="${filename}"`);

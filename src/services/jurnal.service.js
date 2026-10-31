@@ -27,6 +27,16 @@ const postJurnal = async ({ tanggal, noBukti, keterangan, referensiTipe, referen
   });
 };
 
+/** Hapus jurnal (beserta detail) milik satu transaksi sumber, mis. saat transaksi kasir dihapus. */
+const hapusJurnalReferensi = async (referensiTipe, referensiId, transaction) => {
+  const list = await Jurnal.findAll({ where: { referensiTipe, referensiId }, attributes: ['id'], transaction });
+  if (!list.length) return 0;
+  const ids = list.map((j) => j.id);
+  await JurnalDetail.destroy({ where: { jurnalId: ids }, transaction });
+  await Jurnal.destroy({ where: { id: ids }, transaction });
+  return ids.length;
+};
+
 const getAkunByKode = async (kode) => {
   const akun = await Akun.findOne({ where: { kode } });
   if (!akun) throw new ApiError(500, `Akun dengan kode ${kode} tidak ditemukan — pastikan seeder COA sudah dijalankan`);
@@ -128,4 +138,4 @@ const getNeraca = async ({ tanggal } = {}) => {
   };
 };
 
-module.exports = { postJurnal, getAkunByKode, listBukuBesar, getNeraca };
+module.exports = { postJurnal, hapusJurnalReferensi, getAkunByKode, listBukuBesar, getNeraca };

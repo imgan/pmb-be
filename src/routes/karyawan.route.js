@@ -7,6 +7,9 @@ const { createKaryawan, updateKaryawan, importKaryawan } = require('../validatio
 const MENU = require('../constants/menuCodes');
 const ACTION = require('../constants/actions');
 
+// Menu asal + Modul Admin → Master → Karyawan (halaman yang sama).
+const MANAGE_CODES = [MENU.KARYAWAN_MANAGEMENT, MENU.ADMIN_MASTER_KARYAWAN_MANAGEMENT];
+
 router.use(authenticate);
 
 /**
@@ -27,7 +30,7 @@ router.use(authenticate);
  *       200:
  *         description: Ringkasan karyawan
  */
-router.get('/summary', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.READ), karyawanController.genderSummary);
+router.get('/summary', authorize(MANAGE_CODES, ACTION.READ), karyawanController.genderSummary);
 
 /**
  * @swagger
@@ -40,7 +43,7 @@ router.get('/summary', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.READ), karyawa
  *       200:
  *         description: File Excel karyawan
  */
-router.get('/export', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.READ), karyawanController.exportExcel);
+router.get('/export', authorize(MANAGE_CODES, ACTION.READ), karyawanController.exportExcel);
 
 /**
  * @swagger
@@ -53,7 +56,7 @@ router.get('/export', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.READ), karyawan
  *       200:
  *         description: File template Excel
  */
-router.get('/import-template', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.READ), karyawanController.importTemplate);
+router.get('/import-template', authorize(MANAGE_CODES, ACTION.READ), karyawanController.importTemplate);
 
 /**
  * @swagger
@@ -77,7 +80,7 @@ router.get('/import-template', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.READ),
  *       200:
  *         description: Ringkasan hasil import
  */
-router.post('/import', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.CREATE), validate(importKaryawan), karyawanController.importExcel);
+router.post('/import', authorize(MANAGE_CODES, ACTION.CREATE), validate(importKaryawan), karyawanController.importExcel);
 
 /**
  * @swagger
@@ -107,8 +110,8 @@ router.post('/import', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.CREATE), valid
  *       201:
  *         description: Karyawan created
  */
-router.get('/', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.READ), karyawanController.list);
-router.post('/', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.CREATE), validate(createKaryawan), karyawanController.create);
+router.get('/', authorize(MANAGE_CODES, ACTION.READ), karyawanController.list);
+router.post('/', authorize(MANAGE_CODES, ACTION.CREATE), validate(createKaryawan), karyawanController.create);
 
 /**
  * @swagger
@@ -149,8 +152,8 @@ router.post('/', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.CREATE), validate(cr
  *       200:
  *         description: Karyawan deleted
  */
-router.get('/:id', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.READ), karyawanController.detail);
-router.put('/:id', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.UPDATE), validate(updateKaryawan), karyawanController.update);
-router.delete('/:id', authorize(MENU.KARYAWAN_MANAGEMENT, ACTION.DELETE), karyawanController.remove);
+router.get('/:id', authorize(MANAGE_CODES, ACTION.READ), karyawanController.detail);
+router.put('/:id', authorize(MANAGE_CODES, ACTION.UPDATE), validate(updateKaryawan), karyawanController.update);
+router.delete('/:id', authorize(MANAGE_CODES, ACTION.DELETE), karyawanController.remove);
 
 module.exports = router;

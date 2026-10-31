@@ -44,7 +44,8 @@ router.use(authenticate);
  *       201:
  *         description: Golongan kelas created
  */
-router.get('/', authorize(MENU.GOLONGAN_KELAS_MANAGEMENT, ACTION.READ), golonganKelasController.list);
+// List juga dipakai dropdown form Prodi di Modul Admin → Master → Prodi.
+router.get('/', authorize([MENU.GOLONGAN_KELAS_MANAGEMENT, MENU.ADMIN_MASTER_PRODI_MANAGEMENT], ACTION.READ), golonganKelasController.list);
 router.post(
   '/',
   authorize(MENU.GOLONGAN_KELAS_MANAGEMENT, ACTION.CREATE),

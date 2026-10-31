@@ -17,8 +17,8 @@ const listKehadiranMengajar = async ({ tahunAjaranId, dosenId } = {}) => {
         where: Object.keys(jadwalWhere).length ? jadwalWhere : undefined,
         required: !!tahunAjaranId,
         include: [
-          { model: MataKuliah, as: 'mataKuliah', attributes: ['id', 'kodeMk', 'namaMk'] },
-          { model: TahunAjaran, as: 'tahunAjaran', attributes: ['id', 'nama'] },
+          { model: MataKuliah, as: 'mataKuliah', attributes: MataKuliah.ATTRS_RINGKAS },
+          { model: TahunAjaran, as: 'tahunAjaran', attributes: ['id', 'nama', 'jenisSemester'] },
         ],
       },
     ],

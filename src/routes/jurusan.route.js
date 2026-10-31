@@ -7,6 +7,9 @@ const { createJurusan, updateJurusan, importJurusan } = require('../validations/
 const MENU = require('../constants/menuCodes');
 const ACTION = require('../constants/actions');
 
+// Menu asal + Modul Admin → Master → Prodi (halaman yang sama).
+const MANAGE_CODES = [MENU.JURUSAN_MANAGEMENT, MENU.ADMIN_MASTER_PRODI_MANAGEMENT];
+
 router.use(authenticate);
 
 /**
@@ -45,10 +48,11 @@ router.use(authenticate);
  *       201:
  *         description: Jurusan created
  */
-router.get('/', authorize(MENU.JURUSAN_MANAGEMENT, ACTION.READ), jurusanController.list);
+// Daftar jurusan/prodi = data referensi dropdown di banyak modul, jadi cukup login.
+router.get('/', jurusanController.list);
 router.post(
   '/',
-  authorize(MENU.JURUSAN_MANAGEMENT, ACTION.CREATE),
+  authorize(MANAGE_CODES, ACTION.CREATE),
   validate(createJurusan),
   jurusanController.create
 );
@@ -64,7 +68,7 @@ router.post(
  *       200:
  *         description: File Excel jurusan
  */
-router.get('/export', authorize(MENU.JURUSAN_MANAGEMENT, ACTION.READ), jurusanController.exportExcel);
+router.get('/export', authorize(MANAGE_CODES, ACTION.READ), jurusanController.exportExcel);
 
 /**
  * @swagger
@@ -77,7 +81,7 @@ router.get('/export', authorize(MENU.JURUSAN_MANAGEMENT, ACTION.READ), jurusanCo
  *       200:
  *         description: File template Excel
  */
-router.get('/import-template', authorize(MENU.JURUSAN_MANAGEMENT, ACTION.READ), jurusanController.importTemplate);
+router.get('/import-template', authorize(MANAGE_CODES, ACTION.READ), jurusanController.importTemplate);
 
 /**
  * @swagger
@@ -101,7 +105,7 @@ router.get('/import-template', authorize(MENU.JURUSAN_MANAGEMENT, ACTION.READ), 
  *       200:
  *         description: Ringkasan hasil import
  */
-router.post('/import', authorize(MENU.JURUSAN_MANAGEMENT, ACTION.CREATE), validate(importJurusan), jurusanController.importExcel);
+router.post('/import', authorize(MANAGE_CODES, ACTION.CREATE), validate(importJurusan), jurusanController.importExcel);
 
 /**
  * @swagger
@@ -142,13 +146,13 @@ router.post('/import', authorize(MENU.JURUSAN_MANAGEMENT, ACTION.CREATE), valida
  *       200:
  *         description: Jurusan deleted
  */
-router.get('/:id', authorize(MENU.JURUSAN_MANAGEMENT, ACTION.READ), jurusanController.detail);
+router.get('/:id', authorize(MANAGE_CODES, ACTION.READ), jurusanController.detail);
 router.put(
   '/:id',
-  authorize(MENU.JURUSAN_MANAGEMENT, ACTION.UPDATE),
+  authorize(MANAGE_CODES, ACTION.UPDATE),
   validate(updateJurusan),
   jurusanController.update
 );
-router.delete('/:id', authorize(MENU.JURUSAN_MANAGEMENT, ACTION.DELETE), jurusanController.remove);
+router.delete('/:id', authorize(MANAGE_CODES, ACTION.DELETE), jurusanController.remove);
 
 module.exports = router;

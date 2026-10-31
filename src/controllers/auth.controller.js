@@ -3,8 +3,8 @@ const sendResponse = require('../utils/ApiResponse');
 const authService = require('../services/auth.service');
 
 const login = catchAsync(async (req, res) => {
-  const { username, password } = req.body;
-  const result = await authService.login(username, password);
+  const { username, password, tahunAjaranId, module, kodeProdi } = req.body;
+  const result = await authService.login(username, password, { tahunAjaranId, module, kodeProdi });
   sendResponse(res, 200, { message: 'Login successful', data: result });
 });
 

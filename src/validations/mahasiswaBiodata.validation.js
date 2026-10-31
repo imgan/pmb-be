@@ -34,7 +34,12 @@ const saveMahasiswaBiodata = Joi.object({
   hp: Joi.string().max(20).allow('', null),
   almamater: Joi.string().max(150).allow('', null),
   terimaKps: Joi.string().max(10).allow('', null),
-  noKps: Joi.string().max(30).allow('', null),
+  // No KPS wajib kalau Terima KPS = Ya.
+  noKps: Joi.when('terimaKps', {
+    is: 'Ya',
+    then: Joi.string().trim().max(30).invalid(null).required().messages({ 'any.required': 'No KPS wajib diisi untuk penerima KPS', 'string.empty': 'No KPS wajib diisi untuk penerima KPS', 'any.invalid': 'No KPS wajib diisi untuk penerima KPS' }),
+    otherwise: Joi.string().max(30).allow('', null),
+  }),
   nikAyah: Joi.string().max(20).allow('', null),
   namaAyah: Joi.string().max(150).allow('', null),
   tanggalLahirAyah: Joi.date().iso().allow(null),
@@ -59,4 +64,29 @@ const saveMahasiswaBiodata = Joi.object({
   programStudiAsal: Joi.string().max(150).allow('', null),
 }).min(1);
 
-module.exports = { saveMahasiswaBiodata };
+// Field biodata yang dikunci untuk mahasiswa (edit mandiri lewat portal) — hanya boleh diubah
+// BAAK/Prodi lewat PUT /mahasiswa/:id/biodata. NIM ada di tabel mahasiswa, tidak lewat sini.
+const BIODATA_LOCKED_FOR_MAHASISWA = [
+  'kelas',
+  'jalurPendaftaran',
+  'jenisPendaftaran',
+  'tanggalMasukKuliah',
+  'mulaiSemester',
+  'programStudi',
+  'statusBelajar',
+  'statusKuliah',
+  'statusDikti',
+  // Data pembiayaan dikelola BAAK/Keuangan, tidak ditampilkan & tidak bisa diubah dari portal mahasiswa.
+  'jenisPembiayaan',
+  'biayaMasuk',
+  // Data transfer (SKS diakui, PT & prodi asal) dikelola BAAK, tidak ditampilkan di portal mahasiswa.
+  'sksDiakui',
+  'perguruanTinggiAsal',
+  'programStudiAsal',
+];
+
+// Dipakai portal mahasiswa: field terkunci di-strip (bukan error) supaya client yang mengirim
+// seluruh form tetap lolos, tapi nilainya tidak pernah tersimpan.
+const saveBiodataSendiri = saveMahasiswaBiodata.fork(BIODATA_LOCKED_FOR_MAHASISWA, (schema) => schema.strip());
+
+module.exports = { saveMahasiswaBiodata, saveBiodataSendiri, BIODATA_LOCKED_FOR_MAHASISWA };
