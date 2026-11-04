@@ -53,7 +53,8 @@ const getBebasTunggakanData = async (mahasiswaId) => {
     mahasiswa: { nim: mahasiswa.nim, namaLengkap: mahasiswa.namaLengkap, prodi: mahasiswa.jurusan?.namaJurusan ?? '-' },
     biayaBimbingan,
     biayaKuliah: rekap.reduce((sum, r) => sum + r.tagihan, 0),
-    tunggakan: ringkasan.totalTunggakan,
+    // Bebas tunggakan tetap menghitung semua kewajiban, termasuk wisuda & TA/Skripsi.
+    tunggakan: ringkasan.totalTunggakan + ringkasan.sisaWisuda + ringkasan.sisaTaSkripsi,
     rekap,
   };
 };

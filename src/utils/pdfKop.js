@@ -47,10 +47,9 @@ const drawLogoEmblem = (doc, logoUrl, x, y, { height = LOGO_HEIGHT, centerX = nu
   }
 };
 
-/** Cetak kop di awal halaman; setelah ini doc.y berada sedikit di bawah garis kop. */
-const drawKop = (doc, kampus) => {
+/** Cetak kop di awal halaman (atau di `top`); setelah ini doc.y berada sedikit di bawah garis kop. */
+const drawKop = (doc, kampus, { top = doc.page.margins.top } = {}) => {
   const left = doc.page.margins.left;
-  const top = doc.page.margins.top;
   const contentWidth = doc.page.width - left - doc.page.margins.right;
 
   const logoWidth = drawLogoEmblem(doc, kampus?.logoUrl, left, top);

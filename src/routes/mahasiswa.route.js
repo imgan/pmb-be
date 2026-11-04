@@ -8,6 +8,9 @@ const { saveMahasiswaBiodata } = require('../validations/mahasiswaBiodata.valida
 const MENU = require('../constants/menuCodes');
 const ACTION = require('../constants/actions');
 
+// Menu asal + Modul Admin → Master → Mahasiswa (halaman yang sama).
+const MANAGE_CODES = [MENU.MAHASISWA_MANAGEMENT, MENU.ADMIN_MASTER_MAHASISWA_MANAGEMENT];
+
 router.use(authenticate);
 
 /**
@@ -34,7 +37,7 @@ router.use(authenticate);
  */
 router.get(
   '/eligible-peserta',
-  authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.READ),
+  authorize(MANAGE_CODES, ACTION.READ),
   mahasiswaController.eligiblePeserta
 );
 
@@ -51,7 +54,7 @@ router.get(
  */
 router.get(
   '/eligible-summary',
-  authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.READ),
+  authorize(MANAGE_CODES, ACTION.READ),
   mahasiswaController.eligibleSummary
 );
 
@@ -74,7 +77,7 @@ router.get(
  *       400:
  *         description: Tidak ada peserta yang siap / prefix jurusan belum lengkap
  */
-router.post('/generate', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.CREATE), validate(generateMahasiswa), mahasiswaController.generate);
+router.post('/generate', authorize(MANAGE_CODES, ACTION.CREATE), validate(generateMahasiswa), mahasiswaController.generate);
 
 /**
  * @swagger
@@ -87,7 +90,7 @@ router.post('/generate', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.CREATE), va
  *       200:
  *         description: File Excel mahasiswa
  */
-router.get('/export', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.READ), mahasiswaController.exportExcel);
+router.get('/export', authorize(MANAGE_CODES, ACTION.READ), mahasiswaController.exportExcel);
 
 /**
  * @swagger
@@ -100,7 +103,7 @@ router.get('/export', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.READ), mahasis
  *       200:
  *         description: File template Excel
  */
-router.get('/import-template', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.READ), mahasiswaController.importTemplate);
+router.get('/import-template', authorize(MANAGE_CODES, ACTION.READ), mahasiswaController.importTemplate);
 
 /**
  * @swagger
@@ -124,7 +127,7 @@ router.get('/import-template', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.READ)
  *       200:
  *         description: Ringkasan hasil import
  */
-router.post('/import', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.UPDATE), validate(importMahasiswa), mahasiswaController.importExcel);
+router.post('/import', authorize(MANAGE_CODES, ACTION.UPDATE), validate(importMahasiswa), mahasiswaController.importExcel);
 
 /**
  * @swagger
@@ -143,7 +146,7 @@ router.post('/import', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.UPDATE), vali
  */
 // Masa Studi (Prodi & BAAK) memakai list/detail/update mahasiswa untuk mengisi keterangan aktifitas.
 const LIST_CODES = [
-  MENU.MAHASISWA_MANAGEMENT,
+  ...MANAGE_CODES,
   MENU.PRODI_MAHASISWA_KELUAR_MANAGEMENT,
   MENU.PRODI_HABIS_MASA_STUDI_MANAGEMENT,
   MENU.BAAK_MASA_STUDI_MANAGEMENT,
@@ -192,7 +195,7 @@ router.get('/', authorize(LIST_CODES, ACTION.READ), mahasiswaController.list);
  */
 router.get('/:id', authorize(LIST_CODES, ACTION.READ), mahasiswaController.detail);
 router.put('/:id', authorize(LIST_CODES, ACTION.UPDATE), validate(updateMahasiswa), mahasiswaController.update);
-router.delete('/:id', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.DELETE), mahasiswaController.remove);
+router.delete('/:id', authorize(MANAGE_CODES, ACTION.DELETE), mahasiswaController.remove);
 
 /**
  * @swagger
@@ -207,7 +210,7 @@ router.delete('/:id', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.DELETE), mahas
  *       200:
  *         description: Password direset ke NIM
  */
-router.post('/:id/reset-password', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.UPDATE), mahasiswaController.resetPassword);
+router.post('/:id/reset-password', authorize(MANAGE_CODES, ACTION.UPDATE), mahasiswaController.resetPassword);
 
 /**
  * @swagger
@@ -241,7 +244,7 @@ router.post('/:id/reset-password', authorize(MENU.MAHASISWA_MANAGEMENT, ACTION.U
  *       404:
  *         description: Mahasiswa not found
  */
-const BIODATA_CODES = [MENU.MAHASISWA_MANAGEMENT, MENU.YUDISIUM_MANAGEMENT, MENU.PRODI_BIODATA_MAHASISWA_MANAGEMENT];
+const BIODATA_CODES = [...MANAGE_CODES, MENU.YUDISIUM_MANAGEMENT, MENU.PRODI_BIODATA_MAHASISWA_MANAGEMENT];
 
 router.get('/:id/biodata', authorize(BIODATA_CODES, ACTION.READ), mahasiswaController.getBiodata);
 router.put(

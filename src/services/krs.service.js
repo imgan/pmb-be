@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 const { sequelize, Krs, KrsDetail, Mahasiswa, TahunAjaran, JadwalKuliah, Dosen, MataKuliah, Jurusan } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { padananTahunAjaran } = require('./tahunModul.service');
 const { assertJadwalSesuaiProdi } = require('../utils/prodiJadwal');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { assertSksQuota, getIpSemesterSebelumnya, maxSksForSemester } = require('../utils/sksQuota');
@@ -34,11 +35,11 @@ const withTotalSks = (krs) => {
 };
 
 /**
- * Filter "Belum Isi KRS": mahasiswa yang pada periode tsb (default periode aktif) tidak punya KRS atau hanya punya
+ * Filter "Belum Isi KRS": mahasiswa yang pada periode tsb (default periode Tahun FRS aktif) tidak punya KRS atau hanya punya
  * Draft tanpa mata kuliah. Sama dengan dasar grafik AKM dashboard: yang sudah keluar & angkatan setelah periode tsb
  * tidak dihitung. Baris tanpa KRS memakai id negatif (-mahasiswaId) sebagai kunci tabel & status BELUM_ISI.
  */
-const tahunAjaranBelumIsi = (query) => (query.tahunAjaranId ? TahunAjaran.findByPk(query.tahunAjaranId) : TahunAjaran.findOne({ where: { isActive: true } }));
+const tahunAjaranBelumIsi = (query) => (query.tahunAjaranId ? TahunAjaran.findByPk(query.tahunAjaranId) : padananTahunAjaran('frs'));
 
 const listBelumIsiKrs = async (query, mahasiswaWhere, gabungan = null) => {
   const pagination = getPagination(query);
@@ -157,7 +158,7 @@ const listKrs = async (query) => {
 
   const data = rows.map(withTotalSks);
 
-  // Panel filter KRS, Semua Status: mahasiswa tanpa KRS pada periode terpilih (default periode aktif) ikut tampil setelah
+  // Panel filter KRS, Semua Status: mahasiswa tanpa KRS pada periode terpilih (default periode Tahun FRS aktif) ikut tampil setelah
   // baris KRS. Filter semester dilewati karena mahasiswa tanpa KRS belum punya semester.
   const sertakanBelumIsi = query.sertakanBelumIsi === 'true' && !query.status && !query.semester && !query.mahasiswaId;
   if (sertakanBelumIsi && (await tahunAjaranBelumIsi(query))) {

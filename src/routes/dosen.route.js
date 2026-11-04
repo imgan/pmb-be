@@ -148,4 +148,19 @@ router.get('/:id', authorize(MANAGE_CODES, ACTION.READ), dosenController.detail)
 router.put('/:id', authorize(MANAGE_CODES, ACTION.UPDATE), validate(updateDosen), dosenController.update);
 router.delete('/:id', authorize(MANAGE_CODES, ACTION.DELETE), dosenController.remove);
 
+/**
+ * @swagger
+ * /dosen/{id}/reset-password:
+ *   post:
+ *     summary: Reset password portal dosen ke NIP
+ *     tags: [Dosen]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *     responses:
+ *       200:
+ *         description: Password direset
+ */
+router.post('/:id/reset-password', authorize(MANAGE_CODES, ACTION.UPDATE), dosenController.resetPassword);
+
 module.exports = router;

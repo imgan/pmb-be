@@ -171,6 +171,9 @@ router.use('/tahun-ajaran', tahunAjaranRoute);
 // Tahun Ajaran PMB & Keuangan (Modul Admin › Master), terpisah dari tahun akademik.
 router.use('/tahun-pmb', tahunModulRoute.pmb);
 router.use('/tahun-keuangan', tahunModulRoute.keuangan);
+router.use('/tahun-frs', tahunModulRoute.frs);
+router.use('/tahun-ta-skripsi', tahunModulRoute.taSkripsi);
+router.use('/tahun-sp', tahunModulRoute.sp);
 router.use('/mata-kuliah', mataKuliahRoute);
 router.use('/krs', krsRoute);
 // Batasi data modul Prodi ke prodi sesi (wajib untuk akun ber-role PRODI).

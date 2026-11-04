@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Mahasiswa, Jurusan, FeederAkm, TahunAjaran, Krs, TagihanKuliah } = require('../models');
+const { Mahasiswa, Jurusan, FeederAkm, TahunAjaran, Krs, KrsDetail, TagihanKuliah } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { buildWorkbook } = require('../utils/excel');
 const { periodeFromTahunAjaran } = require('./feeder/helpers');
@@ -9,10 +9,11 @@ const { formatTahunAjaran } = require('../utils/tahunAjaran');
  * Statistik AKM (Aktivitas Kuliah Mahasiswa) satu periode, per angkatan & per prodi.
  * Status diambil dari AKM Feeder periode tsb (A/C/G/M/N). Mahasiswa tanpa baris AKM, berdasarkan
  * data SIAKAD tahun ajaran tsb:
- * - KRS disetujui (DPA/BAAK) -> Aktif;
+ * - sudah isi KRS -> Aktif;
  * - status keluar CUTI -> Cuti;
- * - sudah diberi tagihan kuliah tetapi KRS belum disetujui, atau data mahasiswa tidak aktif -> Non Aktif;
- * - selain itu -> "Tidak Memiliki AKM".
+ * - belum isi KRS (tanpa KRS / hanya Draft kosong, sama dengan dashboard dosen & filter Belum Isi menu KRS), sudah
+ *   diberi tagihan kuliah, atau data mahasiswa tidak aktif -> Non Aktif;
+ * - selain itu (periode belum punya data KRS sama sekali, mis. periode lama) -> "Tidak Memiliki AKM".
  * `jurusanId` (dari prodiScope, modul Prodi) membatasi ke prodi tsb.
  * "AKM Tidak Sesuai" = punya AKM berstatus aktif (A/G/M) padahal mahasiswa sudah keluar/non aktif.
  * Mahasiswa yang sudah keluar (lulus/DO/mengundurkan diri, dst) tanpa AKM tidak dihitung.
@@ -45,12 +46,16 @@ const getStatistikAkm = async ({ tahunAjaranId, jurusanId } = {}) => {
       include: [{ model: Jurusan, as: 'jurusan', attributes: ['id', 'namaJurusan', 'kodeProdi'], required: false }],
     }),
     FeederAkm.findAll({ where: { periode }, attributes: ['mahasiswaId', 'statusMahasiswa'], raw: true }),
-    Krs.findAll({ where: { tahunAjaranId: tahunAjaran.id, status: 'DISETUJUI' }, attributes: ['mahasiswaId'], raw: true }),
+    Krs.findAll({
+      where: { tahunAjaranId: tahunAjaran.id },
+      attributes: ['mahasiswaId', 'status'],
+      include: [{ model: KrsDetail, as: 'detailList', attributes: ['id'], required: false }],
+    }),
     TagihanKuliah.findAll({ where: { tahunAjaranId: tahunAjaran.id }, attributes: ['mahasiswaId'], raw: true }),
   ]);
   const idSet = new Set(mahasiswaList.map((m) => m.id));
   const akmBy = new Map(akmList.filter((a) => idSet.has(a.mahasiswaId)).map((a) => [a.mahasiswaId, a.statusMahasiswa]));
-  const krsDisetujui = new Set(krsList.map((k) => k.mahasiswaId));
+  const sudahIsiKrs = new Set(krsList.filter((k) => k.status !== 'DRAFT' || k.detailList.length).map((k) => k.mahasiswaId));
   const bertagihan = new Set(tagihanList.map((t) => t.mahasiswaId));
 
   const perAngkatan = new Map();
@@ -69,9 +74,9 @@ const getStatistikAkm = async ({ tahunAjaranId, jurusanId } = {}) => {
     let kategori;
     if (akm && DARI_AKM[akm]) kategori = DARI_AKM[akm];
     else if (keluar) return; // sudah keluar & tidak punya AKM periode ini: bukan mahasiswa periode ini
-    else if (krsDisetujui.has(m.id)) kategori = 'aktif';
+    else if (sudahIsiKrs.has(m.id)) kategori = 'aktif';
     else if (m.statusKeluar === 'CUTI') kategori = 'cuti';
-    else if (bertagihan.has(m.id) || !m.isActive) kategori = 'nonAktif';
+    else if (krsList.length || bertagihan.has(m.id) || !m.isActive) kategori = 'nonAktif';
     else kategori = 'tanpaAkm';
     const tidakSesuai = !!akm && ['A', 'G', 'M'].includes(akm) && (keluar || !m.isActive);
     tambah(perAngkatan, String(m.tahunMasuk), String(m.tahunMasuk), kategori, tidakSesuai);

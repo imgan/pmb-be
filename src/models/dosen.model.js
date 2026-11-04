@@ -49,6 +49,7 @@ module.exports = (sequelize, DataTypes) => {
       // Password untuk login mandiri di portal Dosen (terpisah dari sistem User/Role admin).
       // Nullable karena dosen lama belum tentu punya akun portal.
       password: { type: DataTypes.STRING(255), allowNull: true },
+      lastLoginAt: { type: DataTypes.DATE, allowNull: true },
       // Foto profil (base64) — dikecualikan dari defaultScope supaya daftar dosen tetap ringan.
       photo: { type: DataTypes.TEXT('long'), allowNull: true },
       createdBy: { type: DataTypes.INTEGER, allowNull: true },

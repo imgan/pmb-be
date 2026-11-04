@@ -1,30 +1,44 @@
 const { Op } = require('sequelize');
-const { TagihanKuliah, PembayaranKuliah, TunggakanMahasiswa, PembayaranSertifikasi, Mahasiswa, Jurusan, TahunAjaran } = require('../models');
+const { TagihanKuliah, TagihanCicilan, PembayaranKuliah, TunggakanMahasiswa, PembayaranSertifikasi, Mahasiswa, Jurusan, TahunAjaran } = require('../models');
 const { hitungSaldoTagihan, ringkasanKewajibanMahasiswa, urutanPeriode } = require('../utils/tagihanSaldo');
-const { buildSisaTaSkripsiMap } = require('./pembayaranTaSkripsi.service');
+const { buildSisaTaSkripsiMap, buildTaTerlambatSet } = require('./pembayaranTaSkripsi.service');
 const { buildSisaBiayaLainMap } = require('./pembayaranLain.service');
+const { buildSisaWisudaMap, buildWisudaTerlambatSet } = require('./pembayaranWisuda.service');
+const { alokasiCicilan } = require('../utils/tagihanCicilan');
 const { buildWorkbook } = require('../utils/excel');
 
 /**
  * Total tunggakan per mahasiswa = sisa tagihan kuliah terkomputasi (tagihan - pembayaran, dari
  * engine Generate Tagihan) DITAMBAH saldo tunggakan manual (TunggakanMahasiswa — dipakai untuk
  * saldo awal migrasi dari sistem lama / penyesuaian manual lain, lihat model TunggakanMahasiswa)
- * DITAMBAH sisa tagihan TA/Skripsi (tarif pendaftaran/perpanjangan dikurangi yang sudah dibayar,
+ * DITAMBAH sisa tagihan TA/Skripsi (tagihan pendaftaran hasil generate & tarif perpanjangan dikurangi yang sudah dibayar,
  * lihat pembayaranTaSkripsi.service.js#buildSisaTaSkripsiMap) DITAMBAH sisa tagihan biaya lain
  * (tarif per angkatan dikurangi yang sudah dibayar, lihat
  * pembayaranLain.service.js#buildSisaBiayaLainMap). Keempat sumber digabung supaya satu angka
  * "tunggakan" mencerminkan seluruh kewajiban mahasiswa, bukan cuma salah satu sumbernya.
  */
+/** Tagihan kuliah menunggak: ada utang semester lalu, atau sisa semester ini / cicilannya lewat jatuh tempo. */
+const kuliahMenunggak = (list, tunggakanLalu) => {
+  const hariIni = new Date().toISOString().slice(0, 10);
+  if (tunggakanLalu > 0) return true;
+  return list.some((t) => {
+    const saldo = hitungSaldoTagihan(t);
+    if (saldo.sisaSemester > 0 && t.tanggalJatuhTempo && t.tanggalJatuhTempo < hariIni) return true;
+    return alokasiCicilan(t.cicilanList ?? [], saldo.totalDibayar).some((c) => c.terlambat);
+  });
+};
+
 const buildTunggakanPerMahasiswa = async (tahunAjaranId) => {
   const tagihanWhere = {};
   if (tahunAjaranId) tagihanWhere.tahunAjaranId = tahunAjaranId;
 
-  const [tagihanList, manualList, taSkripsiMap, biayaLainMap] = await Promise.all([
+  const [tagihanList, manualList, taSkripsiMap, biayaLainMap, wisudaMap, wisudaTerlambat, taTerlambat] = await Promise.all([
     TagihanKuliah.findAll({
       where: tagihanWhere,
       include: [
         { model: Mahasiswa, as: 'mahasiswa', include: [{ model: Jurusan, as: 'jurusan' }] },
         { model: PembayaranKuliah, as: 'pembayaranList' },
+        { model: TagihanCicilan, as: 'cicilanList', required: false },
         { model: TahunAjaran, as: 'tahunAjaran', attributes: ['id', 'nama', 'tahunMulai', 'jenisSemester'], required: false },
       ],
     }),
@@ -33,6 +47,9 @@ const buildTunggakanPerMahasiswa = async (tahunAjaranId) => {
     }),
     buildSisaTaSkripsiMap(),
     buildSisaBiayaLainMap(),
+    buildSisaWisudaMap(),
+    buildWisudaTerlambatSet(),
+    buildTaTerlambatSet(),
   ]);
 
   const byMahasiswa = new Map();
@@ -48,6 +65,8 @@ const buildTunggakanPerMahasiswa = async (tahunAjaranId) => {
         tunggakanManual: 0,
         tagihanTaSkripsisSisa: 0,
         tagihanBiayaLainSisa: 0,
+        tagihanWisudaSisa: 0,
+        menunggak: false,
       });
     }
     return byMahasiswa.get(mahasiswa.id);
@@ -63,15 +82,17 @@ const buildTunggakanPerMahasiswa = async (tahunAjaranId) => {
   });
   tagihanByMahasiswa.forEach((list, mahasiswaId) => {
     const entry = byMahasiswa.get(mahasiswaId);
-    entry.tagihanSisa += tahunAjaranId
-      ? list.reduce((sum, t) => sum + hitungSaldoTagihan(t).totalKewajiban, 0)
-      : ringkasanKewajibanMahasiswa(list).totalKewajiban;
+    const ringkasan = ringkasanKewajibanMahasiswa(list);
+    entry.tagihanSisa += tahunAjaranId ? list.reduce((sum, t) => sum + hitungSaldoTagihan(t).totalKewajiban, 0) : ringkasan.totalKewajiban;
+    const tunggakanLalu = tahunAjaranId ? list.reduce((sum, t) => sum + hitungSaldoTagihan(t).tunggakan, 0) : ringkasan.tunggakan;
+    if (kuliahMenunggak(list, tunggakanLalu)) entry.menunggak = true;
   });
 
   manualList.forEach((row) => {
     if (!row.mahasiswa) return;
     const entry = ensure(row.mahasiswa);
     entry.tunggakanManual += row.nominal;
+    if (row.nominal > 0) entry.menunggak = true;
   });
 
   const ensureMissing = async (idMap) => {
@@ -86,7 +107,11 @@ const buildTunggakanPerMahasiswa = async (tahunAjaranId) => {
     await ensureMissing(taSkripsiMap);
     taSkripsiMap.forEach((sisa, mahasiswaId) => {
       const entry = byMahasiswa.get(mahasiswaId);
-      if (entry) entry.tagihanTaSkripsisSisa += sisa;
+      if (entry) {
+        entry.tagihanTaSkripsisSisa += sisa;
+        // Cicilan TA/Skripsi lewat jatuh tempo = menunggak (sama dengan cicilan wisuda).
+        if (taTerlambat.has(mahasiswaId)) entry.menunggak = true;
+      }
     });
   }
 
@@ -98,27 +123,40 @@ const buildTunggakanPerMahasiswa = async (tahunAjaranId) => {
     });
   }
 
+  if (wisudaMap.size) {
+    await ensureMissing(wisudaMap);
+    wisudaMap.forEach((sisa, mahasiswaId) => {
+      const entry = byMahasiswa.get(mahasiswaId);
+      if (entry) {
+        entry.tagihanWisudaSisa += sisa;
+        if (wisudaTerlambat.has(mahasiswaId)) entry.menunggak = true;
+      }
+    });
+  }
+
   return [...byMahasiswa.values()].map((entry) => ({
     ...entry,
-    totalTunggakan: entry.tagihanSisa + entry.tunggakanManual + entry.tagihanTaSkripsisSisa + entry.tagihanBiayaLainSisa,
+    totalTunggakan: entry.tagihanSisa + entry.tunggakanManual + entry.tagihanTaSkripsisSisa + entry.tagihanBiayaLainSisa + entry.tagihanWisudaSisa,
   }));
 };
 
 /**
  * Ringkasan tunggakan SATU mahasiswa, rumus sama dengan buildTunggakanPerMahasiswa (sisa tagihan
- * kuliah + tunggakan manual + sisa TA/Skripsi + sisa biaya lain), tapi query-nya hanya untuk
+ * kuliah + tunggakan manual + sisa biaya lain; TA/Skripsi & wisuda terpisah), tapi query-nya hanya untuk
  * mahasiswa tsb — dipakai cek batas tagihan (persentase) saat isi KRS / lihat nilai di portal
  * mahasiswa. `totalKewajiban` (pembagi persentase) = total tagihan kuliah sebelum dibayar +
- * tunggakan manual + sisa TA/Skripsi + sisa biaya lain (dua terakhir hanya tersedia sisanya).
+ * tunggakan manual + sisa biaya lain (yang terakhir hanya tersedia sisanya).
  */
 const getRingkasanTunggakanMahasiswa = async (mahasiswaId) =>
   (await getRingkasanTunggakanBatch([mahasiswaId])).get(mahasiswaId);
 
 /** Versi banyak mahasiswa sekaligus (query sekali, bukan per mahasiswa): Map mahasiswaId -> ringkasan. */
+// sisaWisuda & sisaTaSkripsi terpisah dari totalTunggakan: tagihan wisuda dan TA/Skripsi tidak ikut menghitung cekal
+// KRS / UTS / nilai (Batas Tagihan Akademik).
 const getRingkasanTunggakanBatch = async (mahasiswaIds) => {
   const ids = [...new Set(mahasiswaIds)];
   if (!ids.length) return new Map();
-  const [tagihanList, manualList, taSkripsiMap, biayaLainMap] = await Promise.all([
+  const [tagihanList, manualList, taSkripsiMap, biayaLainMap, wisudaMap] = await Promise.all([
     TagihanKuliah.findAll({
       where: { mahasiswaId: ids },
       include: [{ model: PembayaranKuliah, as: 'pembayaranList' }, { model: TahunAjaran, as: 'tahunAjaran', attributes: ['id', 'nama', 'tahunMulai', 'jenisSemester'], required: false }],
@@ -126,6 +164,7 @@ const getRingkasanTunggakanBatch = async (mahasiswaIds) => {
     TunggakanMahasiswa.findAll({ where: { mahasiswaId: ids } }),
     buildSisaTaSkripsiMap({ mahasiswaId: ids }),
     buildSisaBiayaLainMap({ mahasiswaId: ids }),
+    buildSisaWisudaMap({ mahasiswaId: ids }),
   ]);
   const tagihanByMahasiswa = new Map();
   tagihanList.forEach((t) => tagihanByMahasiswa.set(t.mahasiswaId, [...(tagihanByMahasiswa.get(t.mahasiswaId) ?? []), t]));
@@ -138,17 +177,31 @@ const getRingkasanTunggakanBatch = async (mahasiswaIds) => {
       const tagihanSisa = ringkasan.totalKewajiban;
       const tagihanTotal = ringkasan.terbaru ? Math.max(ringkasan.terbaru.totalTagihan, 0) + ringkasan.tunggakan : 0;
       const tunggakanManual = manualByMahasiswa.get(id) ?? 0;
-      const sisaLain = (taSkripsiMap.get(id) ?? 0) + (biayaLainMap.get(id) ?? 0);
-      return [id, { totalTunggakan: tagihanSisa + tunggakanManual + sisaLain, totalKewajiban: tagihanTotal + tunggakanManual + sisaLain }];
+      const sisaLain = biayaLainMap.get(id) ?? 0;
+      return [
+        id,
+        {
+          totalTunggakan: tagihanSisa + tunggakanManual + sisaLain,
+          totalKewajiban: tagihanTotal + tunggakanManual + sisaLain,
+          sisaWisuda: wisudaMap.get(id) ?? 0,
+          sisaTaSkripsi: taSkripsiMap.get(id) ?? 0,
+        },
+      ];
     })
   );
 };
 
-/** `kodeProdi` (opsional) membatasi ke satu prodi — semua golongan kelas (Reguler/Karyawan) prodi itu. */
-const listTunggakanMahasiswa = async ({ tahunAjaranId, kodeProdi } = {}) => {
+/**
+ * `kodeProdi` (opsional) membatasi ke satu prodi — semua golongan kelas (Reguler/Karyawan) prodi itu.
+ * `statusTunggakan` (opsional): MENUNGGAK = ada utang semester lalu / tunggakan manual / lewat jatuh tempo;
+ * BELUM_LUNAS = masih ada sisa tagihan tetapi tidak menunggak.
+ */
+const cocokStatusTunggakan = (r, statusTunggakan) => !statusTunggakan || (statusTunggakan === 'MENUNGGAK' ? r.menunggak : !r.menunggak);
+
+const listTunggakanMahasiswa = async ({ tahunAjaranId, kodeProdi, statusTunggakan } = {}) => {
   const all = await buildTunggakanPerMahasiswa(tahunAjaranId);
   return all
-    .filter((r) => r.totalTunggakan > 0 && (!kodeProdi || r.kodeProdi === kodeProdi))
+    .filter((r) => r.totalTunggakan > 0 && (!kodeProdi || r.kodeProdi === kodeProdi) && cocokStatusTunggakan(r, statusTunggakan))
     .sort((a, b) => b.totalTunggakan - a.totalTunggakan);
 };
 
@@ -248,6 +301,7 @@ const TUNGGAKAN_MAHASISWA_EXPORT_COLUMNS = [
   { header: 'Tunggakan Semester Sebelumnya (Import)', key: 'tunggakanImport', width: 26 },
   { header: 'Sisa TA/Skripsi', key: 'tagihanTaSkripsisSisa', width: 18 },
   { header: 'Sisa Biaya Lain', key: 'tagihanBiayaLainSisa', width: 18 },
+  { header: 'Sisa Wisuda', key: 'tagihanWisudaSisa', width: 18 },
   { header: 'Tunggakan Lain (Manual)', key: 'tunggakanManual', width: 22 },
   { header: 'Total Tunggakan', key: 'totalTunggakan', width: 18 },
 ];
@@ -272,7 +326,7 @@ const buildExportRowsPerPeriode = async ({ tahunAjaranId, kodeProdi } = {}) => {
     return rows.map((r) => ({ ...r, tahunAkademik: label, semester: semesterBy.get(r.mahasiswaId) ?? '-', tunggakanImport: 0 }));
   }
 
-  const [tagihanList, manualList, taSkripsiMap, biayaLainMap] = await Promise.all([
+  const [tagihanList, manualList, taSkripsiMap, biayaLainMap, wisudaMap] = await Promise.all([
     TagihanKuliah.findAll({
       include: [
         { model: Mahasiswa, as: 'mahasiswa', include: [{ model: Jurusan, as: 'jurusan' }] },
@@ -283,6 +337,7 @@ const buildExportRowsPerPeriode = async ({ tahunAjaranId, kodeProdi } = {}) => {
     TunggakanMahasiswa.findAll({ include: [{ model: Mahasiswa, as: 'mahasiswa', include: [{ model: Jurusan, as: 'jurusan' }] }] }),
     buildSisaTaSkripsiMap(),
     buildSisaBiayaLainMap(),
+    buildSisaWisudaMap(),
   ]);
 
   const identitas = new Map();
@@ -292,7 +347,7 @@ const buildExportRowsPerPeriode = async ({ tahunAjaranId, kodeProdi } = {}) => {
     }
   };
   const rows = [];
-  const kosong = { tagihanSisa: 0, tunggakanImport: 0, tagihanTaSkripsisSisa: 0, tagihanBiayaLainSisa: 0, tunggakanManual: 0 };
+  const kosong = { tagihanSisa: 0, tunggakanImport: 0, tagihanTaSkripsisSisa: 0, tagihanBiayaLainSisa: 0, tagihanWisudaSisa: 0, tunggakanManual: 0 };
 
   const byMahasiswa = new Map();
   tagihanList.forEach((t) => {
@@ -334,6 +389,7 @@ const buildExportRowsPerPeriode = async ({ tahunAjaranId, kodeProdi } = {}) => {
   });
   taSkripsiMap.forEach((sisa, id) => tambahLain(id, 'tagihanTaSkripsisSisa', sisa));
   biayaLainMap.forEach((sisa, id) => tambahLain(id, 'tagihanBiayaLainSisa', sisa));
+  wisudaMap.forEach((sisa, id) => tambahLain(id, 'tagihanWisudaSisa', sisa));
   const kurangIdentitas = [...lainnya.keys()].filter((id) => !identitas.has(id));
   if (kurangIdentitas.length) {
     (await Mahasiswa.findAll({ where: { id: kurangIdentitas }, include: [{ model: Jurusan, as: 'jurusan' }] })).forEach(simpanIdentitas);
@@ -347,7 +403,7 @@ const buildExportRowsPerPeriode = async ({ tahunAjaranId, kodeProdi } = {}) => {
     .filter((r) => !kodeProdi || r.kodeProdi === kodeProdi)
     .map((r) => ({
       ...r,
-      totalTunggakan: r.tagihanSisa + r.tunggakanImport + r.tagihanTaSkripsisSisa + r.tagihanBiayaLainSisa + r.tunggakanManual,
+      totalTunggakan: r.tagihanSisa + r.tunggakanImport + r.tagihanTaSkripsisSisa + r.tagihanBiayaLainSisa + r.tagihanWisudaSisa + r.tunggakanManual,
     }))
     .filter((r) => r.totalTunggakan > 0)
     .sort((a, b) => a.prodi.localeCompare(b.prodi) || a.nim.localeCompare(b.nim) || a._urutan - b._urutan)
@@ -355,8 +411,12 @@ const buildExportRowsPerPeriode = async ({ tahunAjaranId, kodeProdi } = {}) => {
 };
 
 /** Export detail tunggakan per mahasiswa per tahun akademik, dengan autofilter untuk TA & prodi. */
-const exportTunggakanPerMahasiswa = async ({ tahunAjaranId, kodeProdi } = {}) => {
-  const rows = await buildExportRowsPerPeriode({ tahunAjaranId, kodeProdi });
+const exportTunggakanPerMahasiswa = async ({ tahunAjaranId, kodeProdi, statusTunggakan } = {}) => {
+  let rows = await buildExportRowsPerPeriode({ tahunAjaranId, kodeProdi });
+  if (statusTunggakan) {
+    const ids = new Set((await listTunggakanMahasiswa({ tahunAjaranId, kodeProdi, statusTunggakan })).map((r) => r.mahasiswaId));
+    rows = rows.filter((r) => ids.has(r.mahasiswaId));
+  }
   const workbook = buildWorkbook('Tunggakan per Mahasiswa', TUNGGAKAN_MAHASISWA_EXPORT_COLUMNS, rows);
   const sheet = workbook.worksheets[0];
   sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: TUNGGAKAN_MAHASISWA_EXPORT_COLUMNS.length } };
@@ -373,6 +433,7 @@ const TUNGGAKAN_JURUSAN_EXPORT_COLUMNS = [
   { header: 'Sisa Tagihan Kuliah', key: 'tagihanSisa', width: 20 },
   { header: 'Sisa TA/Skripsi', key: 'tagihanTaSkripsisSisa', width: 20 },
   { header: 'Sisa Biaya Lain', key: 'tagihanBiayaLainSisa', width: 20 },
+  { header: 'Sisa Wisuda', key: 'tagihanWisudaSisa', width: 20 },
   { header: 'Tunggakan Lain (Manual)', key: 'tunggakanManual', width: 22 },
   { header: 'Total Tunggakan', key: 'totalTunggakan', width: 20 },
 ];
@@ -382,8 +443,8 @@ const TUNGGAKAN_JURUSAN_EXPORT_COLUMNS = [
  * dipakai baik untuk halaman Laporan Tunggakan (rekap per prodi) maupun tombol "Export per
  * Jurusan" di Laporan Tunggakan Mahasiswa supaya angkanya selalu konsisten.
  */
-const buildTunggakanPerJurusan = async (tahunAjaranId, kodeProdi) => {
-  const rows = await listTunggakanMahasiswa({ tahunAjaranId, kodeProdi });
+const buildTunggakanPerJurusan = async (tahunAjaranId, kodeProdi, statusTunggakan) => {
+  const rows = await listTunggakanMahasiswa({ tahunAjaranId, kodeProdi, statusTunggakan });
 
   const byProdi = new Map();
   rows.forEach((row) => {
@@ -394,6 +455,7 @@ const buildTunggakanPerJurusan = async (tahunAjaranId, kodeProdi) => {
         tagihanSisa: 0,
         tagihanTaSkripsisSisa: 0,
         tagihanBiayaLainSisa: 0,
+        tagihanWisudaSisa: 0,
         tunggakanManual: 0,
         totalTunggakan: 0,
       });
@@ -403,6 +465,7 @@ const buildTunggakanPerJurusan = async (tahunAjaranId, kodeProdi) => {
     entry.tagihanSisa += row.tagihanSisa;
     entry.tagihanTaSkripsisSisa += row.tagihanTaSkripsisSisa;
     entry.tagihanBiayaLainSisa += row.tagihanBiayaLainSisa;
+    entry.tagihanWisudaSisa += row.tagihanWisudaSisa;
     entry.tunggakanManual += row.tunggakanManual;
     entry.totalTunggakan += row.totalTunggakan;
   });
@@ -418,17 +481,18 @@ const listTunggakanPerJurusan = async ({ tahunAjaranId } = {}) => {
       tagihanSisa: acc.tagihanSisa + r.tagihanSisa,
       tagihanTaSkripsisSisa: acc.tagihanTaSkripsisSisa + r.tagihanTaSkripsisSisa,
       tagihanBiayaLainSisa: acc.tagihanBiayaLainSisa + r.tagihanBiayaLainSisa,
+      tagihanWisudaSisa: acc.tagihanWisudaSisa + r.tagihanWisudaSisa,
       tunggakanManual: acc.tunggakanManual + r.tunggakanManual,
       totalTunggakan: acc.totalTunggakan + r.totalTunggakan,
     }),
-    { jumlahMahasiswa: 0, tagihanSisa: 0, tagihanTaSkripsisSisa: 0, tagihanBiayaLainSisa: 0, tunggakanManual: 0, totalTunggakan: 0 }
+    { jumlahMahasiswa: 0, tagihanSisa: 0, tagihanTaSkripsisSisa: 0, tagihanBiayaLainSisa: 0, tagihanWisudaSisa: 0, tunggakanManual: 0, totalTunggakan: 0 }
   );
   return { data, grandTotal };
 };
 
 /** Export rekap tunggakan digabung per prodi — dasar hitungannya sama dengan listTunggakanMahasiswa. */
-const exportTunggakanPerJurusan = async ({ tahunAjaranId, kodeProdi } = {}) => {
-  const data = await buildTunggakanPerJurusan(tahunAjaranId, kodeProdi);
+const exportTunggakanPerJurusan = async ({ tahunAjaranId, kodeProdi, statusTunggakan } = {}) => {
+  const data = await buildTunggakanPerJurusan(tahunAjaranId, kodeProdi, statusTunggakan);
   return buildWorkbook('Tunggakan per Jurusan', TUNGGAKAN_JURUSAN_EXPORT_COLUMNS, data);
 };
 

@@ -1,16 +1,16 @@
 const { Op } = require('sequelize');
-const { sequelize, TahunPmb, TahunKeuangan, TahunAjaran } = require('../models');
+const { sequelize, TahunPmb, TahunKeuangan, TahunFrs, TahunTaSkripsi, TahunSp, TahunAjaran } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
 
 /**
- * Tahun Ajaran PMB & Tahun Ajaran Keuangan (Modul Admin › Master): data periode tersendiri per modul, terpisah dari
+ * Tahun PMB, Keuangan, FRS, TA/Skripsi, dan SP (Modul Admin › Master): data periode tersendiri per modul, terpisah dari
  * tahun akademik — PMB dapat membuka penerimaan tahun depan dan kasir masih menagih semester lalu tanpa mengubah
  * tahun akademik / semester mahasiswa. Satu baris aktif per modul.
  */
-const MODEL = { pmb: TahunPmb, keuangan: TahunKeuangan };
-const LABEL = { pmb: 'Tahun ajaran PMB', keuangan: 'Tahun ajaran keuangan' };
+const MODEL = { pmb: TahunPmb, keuangan: TahunKeuangan, frs: TahunFrs, 'ta-skripsi': TahunTaSkripsi, sp: TahunSp };
+const LABEL = { pmb: 'Tahun ajaran PMB', keuangan: 'Tahun ajaran keuangan', frs: 'Tahun FRS', 'ta-skripsi': 'Tahun TA/Skripsi', sp: 'Tahun SP' };
 const SORTABLE_COLUMNS = { nama: ['nama'], tahunMulai: ['tahunMulai'], tahunSelesai: ['tahunSelesai'], isActive: ['isActive'] };
 
 const modelOf = (modul) => {
@@ -83,6 +83,10 @@ const remove = async (modul, id, actorId) => {
   if (modul === 'pmb') {
     const [{ n }] = await sequelize.query('SELECT COUNT(*) AS n FROM gelombang WHERE tahun_pmb_id = :id', { replacements: { id: row.id }, type: sequelize.QueryTypes.SELECT });
     if (Number(n)) throw new ApiError(400, `Tahun ini dipakai ${n} gelombang; ubah tahun gelombang tersebut terlebih dahulu.`);
+  }
+  if (modul === 'ta-skripsi') {
+    const [{ n }] = await sequelize.query('SELECT COUNT(*) AS n FROM tarif_ta_skripsi WHERE tahun_ta_skripsi_id = :id', { replacements: { id: row.id }, type: sequelize.QueryTypes.SELECT });
+    if (Number(n)) throw new ApiError(400, `Tahun ini dipakai ${n} tarif TA/Skripsi; ubah tahun tarif tersebut terlebih dahulu.`);
   }
   await row.update({ isDelete: true, isActive: false, updatedBy: actorId });
 };

@@ -18,6 +18,7 @@ const ApiError = require('../utils/ApiError');
 const { getCetakData } = require('./suratKeterangan.service');
 const { buildSuratPdf, suratPdfFilename } = require('./suratKeteranganPdf.service');
 const { getKampus } = require('./kampus.service');
+const { padananTahunAjaran } = require('./tahunModul.service');
 const { assertSksQuota, getIpSemesterSebelumnya, maxSksForSemester } = require('../utils/sksQuota');
 const { assertNoConflict } = require('../utils/krsConflict');
 const angketPelayananService = require('./angketPelayanan.service');
@@ -60,13 +61,13 @@ const getTahunAjaranAktif = async () => TahunAjaran.findOne({ where: { isActive:
  * yang sedang aktif sekarang, dibedakan formulanya untuk mahasiswa baru vs transfer
  * berdasarkan statusMasuk. Lihat pmb-be/src/utils/hitungSemester.js untuk rumus lengkapnya.
  */
-const getSemesterBerjalan = async (mahasiswaId) => {
+const getSemesterBerjalan = async (mahasiswaId, tahunAjaran = null) => {
   const [mahasiswa, tahunAjaranAktif] = await Promise.all([
     // required: false wajib eksplisit — tahunAjaranId nullable, tanpa ini Sequelize men-default
     // belongsTo tunggal ini jadi INNER JOIN sehingga mahasiswa tanpa tahunAjaranId hilang dari
     // hasil (lihat catatan yang sama di jadwalKuliah.service.js).
     Mahasiswa.findByPk(mahasiswaId, { include: [{ model: TahunAjaran, as: 'tahunAjaran', required: false }] }),
-    getTahunAjaranAktif(),
+    tahunAjaran ?? getTahunAjaranAktif(),
   ]);
   if (!mahasiswa) throw new ApiError(404, 'Mahasiswa tidak ditemukan');
   if (!tahunAjaranAktif) throw new ApiError(400, 'Belum ada tahun ajaran aktif');
@@ -74,6 +75,22 @@ const getSemesterBerjalan = async (mahasiswaId) => {
   const semester = resolveSemesterMahasiswa(mahasiswa, tahunAjaranAktif);
 
   return { semester, statusMasuk: mahasiswa.statusMasuk, tahunAjaranAktif };
+};
+
+/**
+ * Periode pengisian KRS = tahun akademik padanan Tahun FRS aktif (Modul Admin › Tahun › FRS), lepas dari tahun akademik
+ * aktif yang dipakai kehadiran, nilai & jadwal. Belum ada padanan → tahun akademik aktif.
+ */
+const getPeriodeKrs = async (mahasiswaId) => {
+  const tahunAjaran = await padananTahunAjaran('frs');
+  const { semester, statusMasuk } = await getSemesterBerjalan(mahasiswaId, tahunAjaran);
+  return { tahunAjaran, semester, statusMasuk };
+};
+
+const assertPeriodeKrs = (tahunAjaranId, periode) => {
+  if (Number(tahunAjaranId) !== periode.tahunAjaran?.id) {
+    throw new ApiError(400, `Pengisian KRS saat ini hanya untuk periode ${periode.tahunAjaran?.nama ?? '-'} ${periode.tahunAjaran?.jenisSemester ?? ''}`.trim());
+  }
 };
 
 // Nilai di bawah C dianggap perlu diulang: kelas mata kuliahnya (atau mata kuliah pengganti di
@@ -96,7 +113,7 @@ const listJadwalTersedia = async (query, mahasiswaId) => {
   if (mahasiswaId) {
     const [mahasiswa, berjalan] = await Promise.all([
       Mahasiswa.findByPk(mahasiswaId, { include: [{ model: Jurusan, as: 'jurusan', required: false }] }),
-      getSemesterBerjalan(mahasiswaId),
+      query.tahunAjaranId ? TahunAjaran.findByPk(query.tahunAjaranId).then((ta) => getSemesterBerjalan(mahasiswaId, ta)) : getSemesterBerjalan(mahasiswaId),
     ]);
     kodeProdiMahasiswa = mahasiswa?.jurusan?.kodeProdi ?? null;
     semesterBerjalan = berjalan.semester;
@@ -200,7 +217,9 @@ const getKrsOwned = async (mahasiswaId, id) => {
 const saveKrsDraft = async (mahasiswaId, payload) => {
   const { tahunAjaranId, jadwalKuliahIds = [] } = payload;
   // Semester TIDAK diambil dari client — dihitung otomatis supaya tidak bisa dipilih manual.
-  const { semester } = await getSemesterBerjalan(mahasiswaId);
+  const periode = await getPeriodeKrs(mahasiswaId);
+  assertPeriodeKrs(tahunAjaranId, periode);
+  const { semester } = periode;
 
   // KRS baru bisa diisi setelah angket pelayanan tahun ajaran ini diisi.
   await angketPelayananService.assertSudahMengisi(mahasiswaId, tahunAjaranId);
@@ -238,6 +257,7 @@ const ajukanKrs = async (mahasiswaId, id) => {
   const krs = await Krs.findOne({ where: { id, mahasiswaId } });
   if (!krs) throw new ApiError(404, 'KRS tidak ditemukan');
   if (krs.status !== 'DRAFT') throw new ApiError(400, 'KRS ini sudah diajukan sebelumnya');
+  assertPeriodeKrs(krs.tahunAjaranId, await getPeriodeKrs(mahasiswaId));
 
   const details = await KrsDetail.findAll({ where: { krsId: krs.id } });
   if (!details.length) throw new ApiError(400, 'Pilih minimal satu mata kuliah sebelum mengajukan KRS');
@@ -452,6 +472,7 @@ module.exports = {
   getMatakuliahMengulang,
   getTahunAjaranAktif,
   getSemesterBerjalan,
+  getPeriodeKrs,
   listJadwalTersedia,
   getKuotaSks,
   listKrs,

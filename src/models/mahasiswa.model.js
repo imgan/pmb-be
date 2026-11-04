@@ -53,6 +53,7 @@ module.exports = (sequelize, DataTypes) => {
       tanggalKeluar: { type: DataTypes.DATEONLY, allowNull: true },
       alasanKeluar: { type: DataTypes.TEXT, allowNull: true },
       password: { type: DataTypes.STRING(255), allowNull: true },
+      lastLoginAt: { type: DataTypes.DATE, allowNull: true },
       // `photo` (base64) dikecualikan dari defaultScope mengikuti pola user.model.js — dipakai
       // di banyak query lain (mis. list mahasiswa admin) yang tidak perlu blob base64 ikut terbawa.
       photo: { type: DataTypes.TEXT('long'), allowNull: true },

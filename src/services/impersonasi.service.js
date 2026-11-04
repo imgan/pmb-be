@@ -37,7 +37,7 @@ const listDosen = async (query) => {
   if (query.search) where[Op.or] = [{ namaLengkap: like(query.search) }, { nik: like(query.search) }, { nidn: like(query.search) }, { email: like(query.search) }];
   const { rows, count } = await Dosen.findAndCountAll({
     where,
-    attributes: ['id', 'nik', 'nidn', 'namaLengkap', 'gelar', 'email', 'isActive'],
+    attributes: ['id', 'nik', 'nidn', 'namaLengkap', 'gelar', 'email', 'isActive', 'lastLoginAt'],
     order: [['namaLengkap', 'ASC']],
     limit,
     offset,
@@ -52,7 +52,7 @@ const listMahasiswa = async (query) => {
   const { rows, count } = await Mahasiswa.findAndCountAll({
     where,
     include: [{ model: Jurusan, as: 'jurusan', attributes: ['id', 'namaJurusan'] }],
-    attributes: ['id', 'nim', 'namaLengkap', 'email', 'tahunMasuk', 'isActive'],
+    attributes: ['id', 'nim', 'namaLengkap', 'email', 'tahunMasuk', 'isActive', 'lastLoginAt'],
     order: [['nim', 'ASC']],
     limit,
     offset,

@@ -7,6 +7,7 @@ const authorize = require('../middlewares/permission.middleware');
 const { Mahasiswa, Dosen, Yudisium } = require('../models');
 const MENU = require('../constants/menuCodes');
 const ACTION = require('../constants/actions');
+const { getStatistikAkm } = require('../services/statistikAkm.service');
 
 /**
  * Ringkasan Beranda Prodi Console: mahasiswa aktif/cuti, dosen homebase, lulusan (yudisium) &
@@ -30,9 +31,8 @@ router.get(
   catchAsync(async (req, res) => {
     const jurusanId = req.query.jurusanId ? [].concat(req.query.jurusanId).map(Number) : null;
     const byProdi = jurusanId ? { jurusanId } : {};
-    const [mahasiswaAktif, mahasiswaCuti, totalDosen, mahasiswaLulus, dosenStats] = await Promise.all([
-      Mahasiswa.count({ where: { ...byProdi, isActive: true, statusKeluar: null } }),
-      Mahasiswa.count({ where: { ...byProdi, statusKeluar: 'CUTI' } }),
+    const [statistik, totalDosen, mahasiswaLulus, dosenStats] = await Promise.all([
+      getStatistikAkm({ jurusanId }),
       Dosen.count({ where: { ...byProdi, isActive: true } }),
       Yudisium.count({
         include: [{ model: Mahasiswa, as: 'mahasiswa', attributes: [], required: true, where: byProdi }],
@@ -47,8 +47,9 @@ router.get(
     sendResponse(res, 200, {
       message: 'Ringkasan dashboard prodi fetched',
       data: {
-        mahasiswaAktif,
-        mahasiswaCuti,
+        // Sama dengan Statistik Mahasiswa di bawahnya: yang belum isi KRS tidak dihitung aktif.
+        mahasiswaAktif: statistik.total.aktif + statistik.total.doubleDegree + statistik.total.kampusMerdeka,
+        mahasiswaCuti: statistik.total.cuti,
         totalDosen,
         mahasiswaLulus,
         dosenStats: dosenStats.map((r) => ({ kelompokFakultas: r.kelompokFakultas, total: Number(r.total) })),

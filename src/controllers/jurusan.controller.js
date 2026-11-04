@@ -23,6 +23,24 @@ const update = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'Jurusan updated', data });
 });
 
+const listGrup = catchAsync(async (req, res) => {
+  const { data, meta } = await jurusanService.listProdiGrup(req.query);
+  sendResponse(res, 200, { message: 'Prodi fetched', data, meta });
+});
+
+const createGrup = catchAsync(async (req, res) => {
+  sendResponse(res, 201, { message: 'Prodi created', data: await jurusanService.createProdiGrup(req.body, req.user.id) });
+});
+
+const updateGrup = catchAsync(async (req, res) => {
+  sendResponse(res, 200, { message: 'Prodi updated', data: await jurusanService.updateProdiGrup(req.params.id, req.body, req.user.id) });
+});
+
+const removeGrup = catchAsync(async (req, res) => {
+  await jurusanService.deleteProdiGrup(req.params.id, req.user.id);
+  sendResponse(res, 200, { message: 'Prodi deleted' });
+});
+
 const remove = catchAsync(async (req, res) => {
   await jurusanService.deleteJurusan(req.params.id, req.user.id);
   sendResponse(res, 200, { message: 'Jurusan deleted' });
@@ -43,4 +61,8 @@ const importTemplate = catchAsync(async (req, res) => {
   await sendWorkbook(res, workbook, 'template-import-jurusan.xlsx');
 });
 
-module.exports = { list, detail, create, update, remove, exportExcel, importExcel, importTemplate };
+module.exports = {
+  listGrup,
+  createGrup,
+  updateGrup,
+  removeGrup, list, detail, create, update, remove, exportExcel, importExcel, importTemplate };

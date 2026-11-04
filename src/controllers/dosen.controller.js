@@ -28,6 +28,11 @@ const update = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'Dosen updated', data });
 });
 
+const resetPassword = catchAsync(async (req, res) => {
+  const data = await dosenService.resetPasswordDosen(req.params.id, req.user.id);
+  sendResponse(res, 200, { message: `Password ${data.namaLengkap} direset ke NIP`, data });
+});
+
 const remove = catchAsync(async (req, res) => {
   await dosenService.deleteDosen(req.params.id, req.user.id);
   sendResponse(res, 200, { message: 'Dosen deleted' });
@@ -48,4 +53,4 @@ const importTemplate = catchAsync(async (req, res) => {
   await sendWorkbook(res, workbook, 'template-import-dosen.xlsx');
 });
 
-module.exports = { list, stats, detail, create, update, remove, exportExcel, importExcel, importTemplate };
+module.exports = { list, stats, detail, create, update, resetPassword, remove, exportExcel, importExcel, importTemplate };

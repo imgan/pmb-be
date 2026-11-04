@@ -4,26 +4,23 @@ const { terbilangRupiah } = require('../utils/terbilang');
 const { longDate } = require('./formulirSidangTaPdf.service');
 
 /**
- * Kwitansi satu pembayaran kuliah (A5 landscape): identitas mahasiswa, nominal + terbilang,
+ * Kwitansi satu pembayaran kuliah / wisuda (di setengah atas kertas A4; data.judul, data.untukPembayaran, data.labelTotal untuk selain kuliah): identitas mahasiswa, nominal + terbilang,
  * peruntukan (semester & tahun akademik), posisi tagihan s.d. pembayaran ini, dan tanda tangan
  * bagian keuangan (petugas yang mencatat pembayaran).
  */
 const KOTA = 'Bekasi';
 const rupiah = (n) => `Rp ${Math.round(Number(n) || 0).toLocaleString('id-ID')}`;
 
-const buildKwitansiPembayaranPdf = (data, kampus, { dicetakDari = 'Portal Mahasiswa' } = {}) => {
-  const doc = new PDFDocument({
-    size: 'A5',
-    layout: 'landscape',
-    margins: { top: 28, bottom: 24, left: 36, right: 36 },
-    info: { Title: `Kwitansi ${data.nomorKwitansi}` },
-  });
+const MARGIN_ATAS = 28;
+
+/** Satu kwitansi mulai `top`; tingginya muat di setengah A4. */
+const drawKwitansi = (doc, data, kampus, { top }) => {
   const left = doc.page.margins.left;
   const contentWidth = doc.page.width - left - doc.page.margins.right;
 
-  drawKop(doc, kampus);
+  drawKop(doc, kampus, { top: top + MARGIN_ATAS });
 
-  doc.font('Times-Bold').fontSize(13).text('KWITANSI PEMBAYARAN KULIAH', left, doc.y - 4, { width: contentWidth, align: 'center' });
+  doc.font('Times-Bold').fontSize(13).text(data.judul ?? 'KWITANSI PEMBAYARAN KULIAH', left, doc.y - 4, { width: contentWidth, align: 'center' });
   doc.font('Times-Roman').fontSize(10).text(`No. ${data.nomorKwitansi}`, { width: contentWidth, align: 'center' });
   doc.moveDown(0.8);
 
@@ -44,7 +41,7 @@ const buildKwitansiPembayaranPdf = (data, kampus, { dicetakDari = 'Portal Mahasi
   row('Uang sejumlah', terbilangRupiah(data.nominal), 'Times-BoldItalic');
   row(
     'Untuk pembayaran',
-    `Biaya Kuliah Semester ${tagihan.semester} Tahun Akademik ${tagihan.tahunAjaran ?? '-'} (pembayaran ke-${tagihan.pembayaranKe})`
+    data.untukPembayaran ?? `Biaya Kuliah Semester ${tagihan.semester} Tahun Akademik ${tagihan.tahunAjaran ?? '-'} (pembayaran ke-${tagihan.pembayaranKe})`
   );
   row('Tanggal bayar', longDate(data.tanggalBayar));
   row('Bank / No. Bukti', [data.kodeBank, data.noBukti].filter(Boolean).join(' / '));
@@ -59,9 +56,9 @@ const buildKwitansiPembayaranPdf = (data, kampus, { dicetakDari = 'Portal Mahasi
 
   doc.font('Times-Roman').fontSize(9);
   const summary = [
-    ['Total tagihan semester', rupiah(tagihan.totalTagihan)],
+    [data.labelTotal ?? 'Total tagihan semester', rupiah(tagihan.totalTagihan)],
     ['Dibayar s.d. kwitansi ini', rupiah(tagihan.dibayarSampaiIni)],
-    ['Sisa tagihan', tagihan.sisaSetelahIni > 0 ? rupiah(tagihan.sisaSetelahIni) : 'LUNAS'],
+    ['Sisa tagihan', tagihan.sisaSetelahIni > 0 ? rupiah(tagihan.sisaSetelahIni) : tagihan.lebihBayar > 0 ? `LUNAS, lebih bayar ${rupiah(tagihan.lebihBayar)}` : 'LUNAS'],
   ];
   let y = blockY + 38;
   summary.forEach(([label, value]) => {
@@ -80,11 +77,18 @@ const buildKwitansiPembayaranPdf = (data, kampus, { dicetakDari = 'Portal Mahasi
     underline: !!data.petugas,
   });
 
-  const footerY = doc.page.height - doc.page.margins.bottom - 10;
-  doc.font('Times-Italic').fontSize(7.5).fillColor('#555555');
-  doc.text(`Dicetak dari ${dicetakDari} pada ${longDate(new Date())}.`, left, footerY, { width: contentWidth, align: 'left', lineBreak: false });
-  doc.fillColor('black');
+};
 
+// Kertas A4 tegak, kwitansi hanya di setengah atas (setengah bawah kosong) supaya tetap memakai setengah A4
+// walau printer diatur "Fit to page".
+const buildKwitansiPembayaranPdf = (data, kampus) => {
+  // Margin atas diatur di drawKwitansi; margin halaman 0 supaya pdfkit tidak membuat halaman baru.
+  const doc = new PDFDocument({
+    size: 'A4',
+    margins: { top: 0, bottom: 0, left: 36, right: 36 },
+    info: { Title: `Kwitansi ${data.nomorKwitansi}` },
+  });
+  drawKwitansi(doc, data, kampus, { top: 0 });
   doc.end();
   return doc;
 };

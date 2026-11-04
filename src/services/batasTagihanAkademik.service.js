@@ -114,9 +114,9 @@ const bulanKeSemester = (tahunAjaran, now = new Date()) => {
  * - UTS   : sudah membayar >= minBayarUts% tagihan semester (50% = 3 bulan)
  * - Nilai : sudah membayar >= minBayarNilai% dari cicilan yang jatuh tempo s/d bulan berjalan
  *           (mis. bulan ke-3 -> cicilan bulan 1–3 lunas)
- * Tunggakan lain (semester sebelumnya, TA/Skripsi, biaya lain, tunggakan manual) harus lunas untuk
+ * Tunggakan lain (semester sebelumnya, biaya lain, tunggakan manual) harus lunas untuk
  * ketiganya; keringanan disetujui mengurangi tunggakan lain dulu, sisanya dihitung sebagai bayar
- * semester berjalan.
+ * semester berjalan. Tagihan TA/Skripsi & wisuda TIDAK ikut dihitung (lihat getRingkasanTunggakanBatch).
  */
 const getAksesMahasiswa = async (mahasiswa) => {
   const config = toConfig(await BatasTagihanAkademik.findOne({ where: { jurusanId: mahasiswa.jurusanId } }));

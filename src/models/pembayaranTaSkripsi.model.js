@@ -4,7 +4,9 @@ module.exports = (sequelize, DataTypes) => {
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
       mahasiswaId: { type: DataTypes.INTEGER, allowNull: false },
+      tagihanTaSkripsiId: { type: DataTypes.INTEGER, allowNull: true },
       periode: { type: DataTypes.INTEGER, allowNull: false },
+      semester: { type: DataTypes.INTEGER, allowNull: true },
       tanggalBayar: { type: DataTypes.DATEONLY, allowNull: false },
       noBukti: { type: DataTypes.STRING(50), allowNull: false },
       nominal: {
@@ -30,6 +32,7 @@ module.exports = (sequelize, DataTypes) => {
 
   PembayaranTaSkripsi.associate = (models) => {
     PembayaranTaSkripsi.belongsTo(models.Mahasiswa, { foreignKey: 'mahasiswaId', as: 'mahasiswa' });
+    PembayaranTaSkripsi.belongsTo(models.TagihanTaSkripsi, { foreignKey: 'tagihanTaSkripsiId', as: 'tagihan' });
     PembayaranTaSkripsi.belongsTo(models.User, { foreignKey: 'createdBy', as: 'creator' });
     PembayaranTaSkripsi.belongsTo(models.User, { foreignKey: 'updatedBy', as: 'updater' });
   };

@@ -12,6 +12,7 @@ const tunggakanMahasiswa = catchAsync(async (req, res) => {
   const data = await service.listTunggakanMahasiswa({
     tahunAjaranId: req.query.tahunAjaranId ? Number(req.query.tahunAjaranId) : undefined,
     kodeProdi: req.query.kodeProdi || undefined,
+    statusTunggakan: req.query.statusTunggakan || undefined,
   });
   sendResponse(res, 200, { message: 'Laporan tunggakan mahasiswa fetched', data });
 });
@@ -79,6 +80,7 @@ const exportTunggakanPerMahasiswa = catchAsync(async (req, res) => {
   const workbook = await service.exportTunggakanPerMahasiswa({
     tahunAjaranId: req.query.tahunAjaranId ? Number(req.query.tahunAjaranId) : undefined,
     kodeProdi: req.query.kodeProdi || undefined,
+    statusTunggakan: req.query.statusTunggakan || undefined,
   });
   await sendWorkbook(res, workbook, 'tunggakan-per-mahasiswa.xlsx');
 });
@@ -87,6 +89,7 @@ const exportTunggakanPerJurusan = catchAsync(async (req, res) => {
   const workbook = await service.exportTunggakanPerJurusan({
     tahunAjaranId: req.query.tahunAjaranId ? Number(req.query.tahunAjaranId) : undefined,
     kodeProdi: req.query.kodeProdi || undefined,
+    statusTunggakan: req.query.statusTunggakan || undefined,
   });
   await sendWorkbook(res, workbook, 'tunggakan-per-jurusan.xlsx');
 });

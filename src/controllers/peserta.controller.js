@@ -145,6 +145,11 @@ const saveMyDataPmb = catchAsync(async (req, res) => {
   sendResponse(res, 200, { message: 'Data pendaftaran saved', data });
 });
 
+const saveMySumberInformasi = catchAsync(async (req, res) => {
+  const data = await calonMahasiswaService.saveSumberInformasiPeserta(req.peserta.id, req.body);
+  sendResponse(res, 200, { message: 'Sumber informasi saved', data });
+});
+
 const listDokumen = catchAsync(async (req, res) => {
   await pesertaService.getPesertaById(req.params.id);
   const data = await pesertaService.listMyDokumen(req.params.id);
@@ -194,6 +199,7 @@ module.exports = {
   listDokumen,
   getMyDataPmb,
   saveMyDataPmb,
+  saveMySumberInformasi,
   listMyTesUjian,
   mulaiMyTesUjian,
   simpanJawabanMyTesUjian,

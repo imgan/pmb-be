@@ -1,8 +1,11 @@
 const { Op } = require('sequelize');
-const { PembayaranLain, TarifLain, Mahasiswa, Jurusan } = require('../models');
+const { sequelize, PembayaranLain, TarifLain, Mahasiswa, Jurusan } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { postJurnal, getAkunByKode } = require('./jurnal.service');
+
+// Tarif wisuda (kode berawalan W, mis. W2026) ditagih lewat tagihan_wisuda, bukan kewajiban Biaya Lain.
+const bukanWisuda = () => sequelize.where(sequelize.fn('UPPER', sequelize.fn('TRIM', sequelize.col('kode_biaya'))), { [Op.notLike]: 'W%' });
 
 const includeMahasiswa = [
   { model: Mahasiswa, as: 'mahasiswa', include: [{ model: Jurusan, as: 'jurusan' }] },
@@ -52,7 +55,7 @@ const getRingkasanBiayaLainByMahasiswaId = async (mahasiswaId) => {
   if (!mahasiswa) return [];
 
   const tarifList = await TarifLain.findAll({
-    where: { tahunMasuk: mahasiswa.tahunMasuk, isActive: true },
+    where: { [Op.and]: [{ tahunMasuk: mahasiswa.tahunMasuk, isActive: true }, bukanWisuda()] },
     order: [['kodeBiaya', 'ASC']],
   });
   if (!tarifList.length) return [];
@@ -123,7 +126,7 @@ const deletePembayaran = async (id) => {
  * berlaku — dipakai laporan Tunggakan Mahasiswa supaya tidak query per-mahasiswa satu-satu.
  */
 const buildSisaBiayaLainMap = async ({ mahasiswaId } = {}) => {
-  const tarifList = await TarifLain.findAll({ where: { isActive: true }, raw: true });
+  const tarifList = await TarifLain.findAll({ where: { [Op.and]: [{ isActive: true }, bukanWisuda()] }, raw: true });
   if (!tarifList.length) return new Map();
 
   const tarifByTahunMasuk = new Map();

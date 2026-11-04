@@ -1,4 +1,6 @@
 const catchAsync = require('../utils/catchAsync');
+const pembayaranWisudaService = require('../services/pembayaranWisuda.service');
+const pembayaranTaSkripsiService = require('../services/pembayaranTaSkripsi.service');
 const sendResponse = require('../utils/ApiResponse');
 const ApiError = require('../utils/ApiError');
 const service = require('../services/mahasiswaPortal.service');
@@ -34,6 +36,10 @@ const listJadwalTersedia = catchAsync(async (req, res) => {
 const semesterBerjalan = catchAsync(async (req, res) => {
   const data = await service.getSemesterBerjalan(req.mahasiswa.id);
   sendResponse(res, 200, { message: 'Semester berjalan fetched', data });
+});
+
+const periodeKrs = catchAsync(async (req, res) => {
+  sendResponse(res, 200, { message: 'Periode KRS fetched', data: await service.getPeriodeKrs(req.mahasiswa.id) });
 });
 
 const kuotaSks = catchAsync(async (req, res) => {
@@ -184,8 +190,12 @@ const ktmPdf = catchAsync(async (req, res) => {
 
 // Riwayat pembayaran kuliah per semester (tagihan, dibayar, sisa, daftar pembayaran).
 const listPembayaran = catchAsync(async (req, res) => {
-  const data = await pembayaranService.listPembayaranKuliah(req.mahasiswa.id);
-  sendResponse(res, 200, { message: 'Riwayat pembayaran fetched', data });
+  const [data, wisuda, taSkripsi] = await Promise.all([
+    pembayaranService.listPembayaranKuliah(req.mahasiswa.id),
+    pembayaranWisudaService.tagihanWisudaMahasiswa(req.mahasiswa.id),
+    pembayaranTaSkripsiService.tagihanTaMahasiswa(req.mahasiswa.id),
+  ]);
+  sendResponse(res, 200, { message: 'Riwayat pembayaran fetched', data: { ...data, wisuda, taSkripsi } });
 });
 
 const kwitansiPdf = catchAsync(async (req, res) => {
@@ -241,6 +251,7 @@ module.exports = {
   listJadwalTersedia,
   semesterBerjalan,
   kuotaSks,
+  periodeKrs,
   listKrs,
   saveKrsDraft,
   ajukanKrs,

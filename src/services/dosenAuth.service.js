@@ -16,6 +16,9 @@ const loginDosen = async ({ nip, nidn, email, password }) => {
   const isMatch = await bcrypt.compare(password, dosen.password);
   if (!isMatch) throw new ApiError(401, 'NIP atau password salah');
 
+  // silent: login bukan perubahan data dosen, updated_at tidak ikut berubah.
+  await Dosen.update({ lastLoginAt: new Date() }, { where: { id: dosen.id }, silent: true });
+
   const accessToken = generateAccessToken({ sub: dosen.id, type: 'dosen' });
   return { dosen: await Dosen.findByPk(dosen.id), accessToken };
 };

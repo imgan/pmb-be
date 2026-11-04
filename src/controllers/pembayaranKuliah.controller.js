@@ -23,7 +23,7 @@ const remove = catchAsync(async (req, res) => {
 // Kwitansi satu pembayaran (format sama dengan yang dicetak mahasiswa di portal).
 const kwitansiPdf = catchAsync(async (req, res) => {
   const [data, kampus] = await Promise.all([getKwitansiData(null, Number(req.params.id)), kampusService.getKampus()]);
-  const doc = buildKwitansiPembayaranPdf(data, kampus, { dicetakDari: 'Bagian Keuangan' });
+  const doc = buildKwitansiPembayaranPdf(data, kampus);
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="kwitansi-${data.mahasiswa.nim}-${req.params.id}.pdf"`);
   doc.pipe(res);

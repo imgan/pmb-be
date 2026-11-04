@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { Op, literal } = require('sequelize');
-const { Peserta, GolonganKelas, Jurusan, PesertaBiodata, PesertaDokumen, DokumenKelengkapan, Mahasiswa, SumberInformasi, Beasiswa } = require('../models');
+const { CalonMahasiswa, Peserta, GolonganKelas, Jurusan, PesertaBiodata, PesertaDokumen, DokumenKelengkapan, Mahasiswa, SumberInformasi, Beasiswa } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { normalisasiHp, sqlHpBersih, variasiHp } = require('../utils/nomorHp');
@@ -10,6 +10,7 @@ const { generateResetToken, hashToken } = require('../utils/resetToken');
 const { resolveOrder } = require('../utils/sorting');
 const { syncFlagDokumen } = require('../utils/statusDokumen');
 const tahunModulService = require('./tahunModul.service');
+const { pastikanBarisPeserta, selaraskanDariAkun } = require('./calonMahasiswa.service');
 
 const includeRelations = [
   { model: GolonganKelas, as: 'golonganKelas' },
@@ -131,6 +132,9 @@ const createPesertaWithGeneratedPassword = async ({ biodata, ...payload }, actor
     return baru;
   });
 
+  // Setiap pendaftar langsung tampil di menu Peserta, sama dengan Dashboard & Reporting.
+  await pastikanBarisPeserta(peserta.id);
+
   const emailSent = await sendPesertaCredentialsEmail(peserta, plainPassword);
   return { peserta: await getPesertaById(peserta.id), emailSent };
 };
@@ -159,6 +163,7 @@ const updatePeserta = async (id, payload, actorId) => {
   const ikutHp =
     payload.noTelepon && peserta.wajibGantiPassword && normalisasiHp(payload.noTelepon) !== normalisasiHp(peserta.noTelepon) && normalisasiHp(payload.noTelepon).length >= 8;
   await peserta.update({ ...payload, ...(ikutHp ? { password: await bcrypt.hash(normalisasiHp(payload.noTelepon), 10) } : {}), updatedBy: actorId });
+  await selaraskanDariAkun(id, payload);
   return getPesertaById(id);
 };
 
@@ -179,6 +184,7 @@ const updateMyProfile = async (pesertaId, payload) => {
   }
 
   await peserta.update(payload);
+  await selaraskanDariAkun(pesertaId, payload);
   return getPesertaById(pesertaId);
 };
 
@@ -186,6 +192,7 @@ const deletePeserta = async (id, actorId) => {
   const peserta = await Peserta.findByPk(id);
   if (!peserta) throw new ApiError(404, 'Peserta not found');
   await peserta.update({ updatedBy: actorId });
+  await CalonMahasiswa.destroy({ where: { pesertaId: id } });
   await peserta.destroy();
 };
 

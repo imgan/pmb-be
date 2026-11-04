@@ -190,6 +190,8 @@ router.get('/semester-berjalan', mahasiswaPortalController.semesterBerjalan);
  *         description: Kuota SKS (null maxSks berarti belum ada riwayat nilai / tidak dibatasi)
  */
 router.get('/krs/kuota', mahasiswaPortalController.kuotaSks);
+// Periode pengisian KRS mengikuti Tahun FRS aktif (Modul Admin › Tahun › FRS).
+router.get('/krs/periode', mahasiswaPortalController.periodeKrs);
 
 /**
  * @swagger

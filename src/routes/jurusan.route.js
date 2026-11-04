@@ -3,7 +3,7 @@ const jurusanController = require('../controllers/jurusan.controller');
 const authenticate = require('../middlewares/auth.middleware');
 const authorize = require('../middlewares/permission.middleware');
 const validate = require('../middlewares/validate.middleware');
-const { createJurusan, updateJurusan, importJurusan } = require('../validations/jurusan.validation');
+const { createJurusan, updateJurusan, importJurusan, simpanProdiGrup } = require('../validations/jurusan.validation');
 const MENU = require('../constants/menuCodes');
 const ACTION = require('../constants/actions');
 
@@ -49,6 +49,12 @@ router.use(authenticate);
  *         description: Jurusan created
  */
 // Daftar jurusan/prodi = data referensi dropdown di banyak modul, jadi cukup login.
+// Master Jurusan / Prodi: satu prodi -> banyak golongan kelas.
+router.get('/grup', authorize(MANAGE_CODES, ACTION.READ), jurusanController.listGrup);
+router.post('/grup', authorize(MANAGE_CODES, ACTION.CREATE), validate(simpanProdiGrup), jurusanController.createGrup);
+router.put('/grup/:id', authorize(MANAGE_CODES, ACTION.UPDATE), validate(simpanProdiGrup), jurusanController.updateGrup);
+router.delete('/grup/:id', authorize(MANAGE_CODES, ACTION.DELETE), jurusanController.removeGrup);
+
 router.get('/', jurusanController.list);
 router.post(
   '/',

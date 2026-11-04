@@ -1,18 +1,20 @@
-const { TarifTaSkripsi, Jurusan, TahunAjaran } = require('../models');
+const { Op } = require('sequelize');
+const { TarifTaSkripsi, Jurusan, TahunTaSkripsi } = require('../models');
 const { formatTahunAjaran } = require('../utils/tahunAjaran');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPagingMeta } = require('../utils/pagination');
 const { resolveOrder } = require('../utils/sorting');
 const { buildWorkbook, parseWorkbookFromBase64, cellString, cellBoolean } = require('../utils/excel');
+const { selaraskanTagihanDariTarif } = require('./pembayaranTaSkripsi.service');
 
 const includeRelations = [
   { model: Jurusan, as: 'jurusan', required: false },
-  { model: TahunAjaran, as: 'tahunAjaran', attributes: ['id', 'nama', 'jenisSemester'], required: false },
+  { model: TahunTaSkripsi, as: 'tahunTaSkripsi', attributes: ['id', 'nama', 'jenisSemester'], required: false },
 ];
 
 const EXPORT_COLUMNS = [
   { header: 'Prodi', key: 'jurusan', width: 30 },
-  { header: 'Tahun Akademik', key: 'tahunAkademik', width: 22 },
+  { header: 'Tahun TA/Skripsi', key: 'tahunTaSkripsi', width: 22 },
   { header: 'Periode', key: 'periode', width: 12 },
   { header: 'Biaya Pendaftaran', key: 'biayaPendaftaran', width: 20 },
   { header: 'Biaya Perpanjangan', key: 'biayaPerpanjangan', width: 20 },
@@ -28,7 +30,7 @@ const cellNumber = (value) => {
 
 const SORTABLE_COLUMNS = {
   periode: ['periode'],
-  tahunAjaran: [{ model: TahunAjaran, as: 'tahunAjaran' }, 'nama'],
+  tahunTaSkripsi: [{ model: TahunTaSkripsi, as: 'tahunTaSkripsi' }, 'nama'],
   biayaPendaftaran: ['biayaPendaftaran'],
   biayaPerpanjangan: ['biayaPerpanjangan'],
   isActive: ['isActive'],
@@ -39,7 +41,7 @@ const listTarifTaSkripsi = async (query) => {
   const { page, limit, offset } = getPagination(query);
   const where = {};
   if (query.periode) where.periode = query.periode;
-  if (query.tahunAjaranId) where.tahunAjaranId = query.tahunAjaranId;
+  if (query.tahunTaSkripsiId) where.tahunTaSkripsiId = query.tahunTaSkripsiId;
   if (query.jurusanId) where.jurusanId = query.jurusanId;
   if (query.isActive !== undefined) where.isActive = query.isActive === 'true' || query.isActive === true;
 
@@ -61,15 +63,41 @@ const getTarifTaSkripsiById = async (id) => {
   return item;
 };
 
+/**
+ * Satu prodi hanya boleh punya satu tarif per Tahun TA/Skripsi. Prodi dibandingkan lewat kode prodi, karena satu prodi
+ * punya beberapa baris jurusan (golongan kelas) dan Generate Tagihan juga mencocokkan tarif lewat kode prodi.
+ */
+const assertTidakDuplikat = async ({ jurusanId, tahunTaSkripsiId }, kecualiId = null) => {
+  if (!jurusanId || !tahunTaSkripsiId) return;
+  const jurusan = await Jurusan.findByPk(jurusanId, { attributes: ['id', 'kodeProdi', 'namaJurusan'] });
+  if (!jurusan) throw new ApiError(404, 'Prodi tidak ditemukan');
+  const prodiSama = jurusan.kodeProdi ? { kodeProdi: jurusan.kodeProdi } : { id: jurusan.id };
+  const ada = await TarifTaSkripsi.findOne({
+    where: { tahunTaSkripsiId, ...(kecualiId ? { id: { [Op.ne]: kecualiId } } : {}) },
+    include: [
+      { model: Jurusan, as: 'jurusan', attributes: [], where: prodiSama, required: true },
+      { model: TahunTaSkripsi, as: 'tahunTaSkripsi', attributes: ['nama', 'jenisSemester'], required: false },
+    ],
+  });
+  if (ada) {
+    const tahun = ada.tahunTaSkripsi ? `${ada.tahunTaSkripsi.nama} ${ada.tahunTaSkripsi.jenisSemester ?? ''}`.trim() : 'ini';
+    throw new ApiError(409, `Tarif ${jurusan.namaJurusan} untuk Tahun TA/Skripsi ${tahun} sudah ada. Ubah tarif yang sudah ada, jangan input dua kali.`);
+  }
+};
+
 const createTarifTaSkripsi = async (payload, actorId) => {
+  await assertTidakDuplikat(payload);
   const item = await TarifTaSkripsi.create({ ...payload, createdBy: actorId, updatedBy: actorId });
   return getTarifTaSkripsiById(item.id);
 };
 
+/** Tagihan mahasiswa hasil generate dari tarif ini ikut ditimpa ke nominal baru (lihat selaraskanTagihanDariTarif). */
 const updateTarifTaSkripsi = async (id, payload, actorId) => {
   const item = await getTarifTaSkripsiById(id);
+  await assertTidakDuplikat({ jurusanId: payload.jurusanId ?? item.jurusanId, tahunTaSkripsiId: payload.tahunTaSkripsiId !== undefined ? payload.tahunTaSkripsiId : item.tahunTaSkripsiId }, item.id);
   await item.update({ ...payload, updatedBy: actorId });
-  return getTarifTaSkripsiById(id);
+  const tagihanDisesuaikan = await selaraskanTagihanDariTarif(id, actorId);
+  return { ...(await getTarifTaSkripsiById(id)).toJSON(), tagihanDisesuaikan };
 };
 
 const deleteTarifTaSkripsi = async (id) => {
@@ -81,7 +109,7 @@ const exportTarifTaSkripsi = async () => {
   const rows = await TarifTaSkripsi.findAll({ include: includeRelations, order: [['periode', 'DESC']] });
   const data = rows.map((t) => ({
     jurusan: t.jurusan?.namaJurusan ?? '',
-    tahunAkademik: formatTahunAjaran(t.tahunAjaran) ?? '',
+    tahunTaSkripsi: formatTahunAjaran(t.tahunTaSkripsi) ?? '',
     periode: t.periode,
     biayaPendaftaran: t.biayaPendaftaran,
     biayaPerpanjangan: t.biayaPerpanjangan,
@@ -93,7 +121,7 @@ const exportTarifTaSkripsi = async () => {
 const exportTarifTaSkripsiTemplate = () => {
   const sample = {
     jurusan: 'Nama Prodi (sesuai master data)',
-    tahunAkademik: '2026/2027 GANJIL',
+    tahunTaSkripsi: '2026/2027 GANJIL',
     periode: 2026,
     biayaPendaftaran: 1000000,
     biayaPerpanjangan: 250000,
@@ -106,16 +134,16 @@ const exportTarifTaSkripsiTemplate = () => {
  * Boleh MEMBUAT baru sekaligus mengubah yang sudah ada (dicocokkan lewat Prodi + Periode),
  * dipakai untuk migrasi tarif TA/skripsi dari sistem kampus lama.
  */
-/** "2026/2027 GANJIL" (format export) -> id tahun ajaran; tanpa semester dicocokkan lewat nama saja. */
-const resolveTahunAjaranId = (tahunAjaranList, text) => {
-  const [nama, jenis] = text.trim().toUpperCase().split(/s+/);
-  const match = tahunAjaranList.find((t) => t.nama === nama && (!jenis || t.jenisSemester === jenis));
+/** "2026/2027 GANJIL" (format export) -> id Tahun TA/Skripsi; tanpa semester dicocokkan lewat nama saja. */
+const resolveTahunId = (tahunList, text) => {
+  const [nama, jenis] = text.trim().toUpperCase().split(/\s+/);
+  const match = tahunList.find((t) => t.nama === nama && (!jenis || t.jenisSemester === jenis));
   return match?.id ?? null;
 };
 
 const importTarifTaSkripsi = async (fileBase64, actorId) => {
   const rows = await parseWorkbookFromBase64(fileBase64);
-  const tahunAjaranList = await TahunAjaran.findAll({ attributes: ['id', 'nama', 'jenisSemester'] });
+  const tahunList = await TahunTaSkripsi.findAll({ attributes: ['id', 'nama', 'jenisSemester'] });
   const errors = [];
   let successCount = 0;
 
@@ -137,17 +165,18 @@ const importTarifTaSkripsi = async (fileBase64, actorId) => {
       continue;
     }
 
-    const tahunAkademikText = cellString(data['Tahun Akademik']);
-    const tahunAjaranId = tahunAkademikText ? resolveTahunAjaranId(tahunAjaranList, tahunAkademikText) : null;
-    if (tahunAkademikText && !tahunAjaranId) {
-      errors.push({ row: rowNumber, message: `Tahun Akademik "${tahunAkademikText}" tidak ditemukan (format: 2026/2027 GANJIL)` });
+    // Kolom "Tahun Akademik" dari template lama tetap dibaca.
+    const tahunText = cellString(data['Tahun TA/Skripsi'] ?? data['Tahun Akademik']);
+    const tahunTaSkripsiId = tahunText ? resolveTahunId(tahunList, tahunText) : null;
+    if (tahunText && !tahunTaSkripsiId) {
+      errors.push({ row: rowNumber, message: `Tahun TA/Skripsi "${tahunText}" tidak ditemukan (format: 2026/2027 GANJIL)` });
       continue;
     }
 
     const payload = {
       jurusanId: jurusan.id,
       periode,
-      ...(tahunAkademikText ? { tahunAjaranId } : {}),
+      ...(tahunText ? { tahunTaSkripsiId } : {}),
       biayaPendaftaran: cellNumber(data['Biaya Pendaftaran']),
       biayaPerpanjangan: cellNumber(data['Biaya Perpanjangan']),
       isActive: cellBoolean(data['Status Aktif'], true),
@@ -156,8 +185,10 @@ const importTarifTaSkripsi = async (fileBase64, actorId) => {
 
     try {
       const existing = await TarifTaSkripsi.findOne({ where: { jurusanId: jurusan.id, periode } });
+      await assertTidakDuplikat({ jurusanId: jurusan.id, tahunTaSkripsiId: payload.tahunTaSkripsiId ?? existing?.tahunTaSkripsiId }, existing?.id);
       if (existing) {
         await existing.update(payload);
+        await selaraskanTagihanDariTarif(existing.id, actorId);
       } else {
         await TarifTaSkripsi.create({ ...payload, createdBy: actorId });
       }

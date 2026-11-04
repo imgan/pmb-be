@@ -12,7 +12,7 @@ const ACTION = require('../constants/actions');
  * @swagger
  * tags:
  *   name: TahunModul
- *   description: Tahun Ajaran PMB (/tahun-pmb) & Tahun Ajaran Keuangan (/tahun-keuangan) — CRUD + aktifkan, terpisah dari tahun akademik
+ *   description: Tahun PMB (/tahun-pmb), Keuangan (/tahun-keuangan), FRS (/tahun-frs), TA/Skripsi (/tahun-ta-skripsi), SP (/tahun-sp) — CRUD + aktifkan, terpisah dari tahun akademik
  * /tahun-pmb:
  *   get: { summary: List tahun ajaran PMB (search, isActive), tags: [TahunModul], security: [{ bearerAuth: [] }] }
  *   post: { summary: Tambah tahun ajaran PMB, tags: [TahunModul], security: [{ bearerAuth: [] }] }
@@ -40,8 +40,8 @@ const createSchema = Joi.object({
 });
 const updateSchema = Joi.object({ nama: Joi.string().max(20), tahunMulai: tahun, tahunSelesai: tahun, jenisSemester: Joi.string().valid('GANJIL', 'GENAP'), isActive: Joi.boolean() }).min(1);
 
-/** modul = pmb | keuangan; `bacaJuga` = menu lain yang boleh membaca daftar (mis. form Gelombang memilih Tahun PMB). */
-const buatRouter = (modul, kodeMenu, bacaJuga) => {
+/** modul = pmb | keuangan | frs | ta-skripsi | sp; `bacaJuga` = menu lain yang boleh membaca daftar (mis. form Gelombang memilih Tahun PMB). */
+const buatRouter = (modul, kodeMenu, bacaJuga = []) => {
   const router = require('express').Router();
   router.use(authenticate);
   const ok = (code, message, fn) => catchAsync(async (req, res) => sendResponse(res, code, { message, data: await fn(req) }));
@@ -60,4 +60,7 @@ const buatRouter = (modul, kodeMenu, bacaJuga) => {
 module.exports = {
   pmb: buatRouter('pmb', MENU.ADMIN_MASTER_TAHUN_PMB_MANAGEMENT, [MENU.GELOMBANG_MANAGEMENT, MENU.CALON_MAHASISWA_MANAGEMENT]),
   keuangan: buatRouter('keuangan', MENU.ADMIN_MASTER_TAHUN_KEUANGAN_MANAGEMENT, [MENU.KEUANGAN_DASHBOARD]),
+  frs: buatRouter('frs', MENU.ADMIN_MASTER_TAHUN_FRS_MANAGEMENT, [MENU.SIM_FRS_MANAGEMENT]),
+  taSkripsi: buatRouter('ta-skripsi', MENU.ADMIN_MASTER_TAHUN_TA_SKRIPSI_MANAGEMENT, [MENU.KEUANGAN_TARIF_TA_SKRIPSI_MANAGEMENT]),
+  sp: buatRouter('sp', MENU.ADMIN_MASTER_TAHUN_SP_MANAGEMENT),
 };

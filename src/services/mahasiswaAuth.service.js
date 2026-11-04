@@ -12,6 +12,9 @@ const loginMahasiswa = async ({ nim, email, password }) => {
   const isMatch = await bcrypt.compare(password, mahasiswa.password);
   if (!isMatch) throw new ApiError(401, 'NIM/email atau password salah');
 
+  // silent: login bukan perubahan data mahasiswa, updated_at tidak ikut berubah.
+  await Mahasiswa.update({ lastLoginAt: new Date() }, { where: { id: mahasiswa.id }, silent: true });
+
   const accessToken = generateAccessToken({ sub: mahasiswa.id, type: 'mahasiswa' });
   return { mahasiswa: await Mahasiswa.findByPk(mahasiswa.id), accessToken };
 };

@@ -21,7 +21,7 @@ const {
   setBiodataLock,
 } = require('../validations/peserta.validation');
 const { uploadDokumen } = require('../validations/pesertaDokumen.validation');
-const { saveDataPmb } = require('../validations/calonMahasiswa.validation');
+const { saveDataPmb, saveSumberInformasi } = require('../validations/calonMahasiswa.validation');
 const { simpanJawabanUjian } = require('../validations/tesUjian.validation');
 
 /**
@@ -222,6 +222,8 @@ router.delete('/me/dokumen/:dokumenKelengkapanId', authenticatePeserta, pesertaC
 // Portal peserta: Sumber Informasi 2 (kelas, skema pembayaran, ukuran almamater, gelombang, jurusan 1–3). Ditolak bila dikunci admin.
 router.get('/me/data-pmb', authenticatePeserta, pesertaController.getMyDataPmb);
 router.put('/me/data-pmb', authenticatePeserta, validate(saveDataPmb), pesertaController.saveMyDataPmb);
+// Portal peserta: Sumber Informasi (sumber, keterangan, kode unik), kunci sendiri dari popup admin.
+router.put('/me/sumber-informasi', authenticatePeserta, validate(saveSumberInformasi), pesertaController.saveMySumberInformasi);
 router.get('/me/tes-ujian', authenticatePeserta, pesertaController.listMyTesUjian);
 // Pengerjaan soal online tes PMB (bank ujian LMS): mulai / lanjutkan, simpan jawaban per soal, kirim.
 router.post('/me/tes-ujian/:id/mulai', authenticatePeserta, pesertaController.mulaiMyTesUjian);

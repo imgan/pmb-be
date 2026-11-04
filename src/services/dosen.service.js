@@ -109,6 +109,14 @@ const updateDosen = async (id, payload, actorId) => {
   return getDosenById(id);
 };
 
+/** Reset password portal dosen ke password awal (NIP). */
+const resetPasswordDosen = async (id, actorId) => {
+  const dosen = await getDosenById(id);
+  if (!dosen.nik) throw new ApiError(400, 'Dosen belum punya NIP. Isi NIP terlebih dahulu');
+  await dosen.update({ ...(await passwordAwal(dosen.nik)), updatedBy: actorId });
+  return { nip: dosen.nik, namaLengkap: dosen.namaLengkap };
+};
+
 const deleteDosen = async (id, actorId) => {
   const dosen = await getDosenById(id);
   await dosen.update({ isDelete: true, updatedBy: actorId });
@@ -278,6 +286,7 @@ const importDosen = async (fileBase64, actorId) => {
 };
 
 module.exports = {
+  resetPasswordDosen,
   listDosen,
   getDosenStats,
   getDosenById,

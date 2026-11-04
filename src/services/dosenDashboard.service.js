@@ -10,6 +10,8 @@ const {
   JadwalKuliah,
   KehadiranDosen,
   AngketPelayananJawaban,
+  Krs,
+  KrsDetail,
 } = require('../models');
 const { periodeFromTahunAjaran } = require('./feeder/helpers');
 const ApiError = require('../utils/ApiError');
@@ -64,18 +66,29 @@ const STATUS_KOSONG = () => ({ jumlah: 0, aktif: 0, cuti: 0, nonAktif: 0, lulus:
 /**
  * Jumlah mahasiswa per prodi menurut status: Lulus = sudah yudisium; Dikeluarkan = DROP_OUT;
  * Mengundurkan Diri = MENGUNDURKAN_DIRI; Cuti = status keluar CUTI atau AKM periode berjalan C;
- * Non-Aktif = AKM N, status keluar lain, atau akun nonaktif; sisanya Aktif.
+ * Non-Aktif = AKM N, status keluar lain, akun nonaktif, atau belum isi KRS (tanpa KRS / hanya Draft kosong,
+ * sama dengan filter Belum Isi di menu KRS); sisanya Aktif. AKM A/G/M tetap Aktif walau tanpa KRS. Aturan KRS
+ * dilewati bila periode belum punya data KRS sama sekali (mis. periode lama) dan untuk angkatan setelah periode tsb.
  */
 const statistikProdi = async (tahunAjaran) => {
   const periode = tahunAjaran ? periodeFromTahunAjaran(tahunAjaran) : null;
-  const [mahasiswa, lulusList, akmList] = await Promise.all([
+  const [mahasiswa, lulusList, akmList, krsList] = await Promise.all([
     Mahasiswa.findAll({
-      attributes: ['id', 'isActive', 'statusKeluar', 'jurusanId'],
+      attributes: ['id', 'isActive', 'statusKeluar', 'jurusanId', 'tahunMasuk'],
       include: [{ model: Jurusan, as: 'jurusan', attributes: ['id', 'namaJurusan'], required: false }],
     }),
     Yudisium.findAll({ attributes: ['mahasiswaId'], raw: true }),
     periode ? FeederAkm.findAll({ where: { periode }, attributes: ['mahasiswaId', 'statusMahasiswa'], raw: true }) : [],
+    tahunAjaran
+      ? Krs.findAll({
+          where: { tahunAjaranId: tahunAjaran.id },
+          attributes: ['mahasiswaId', 'status'],
+          include: [{ model: KrsDetail, as: 'detailList', attributes: ['id'], required: false }],
+        })
+      : [],
   ]);
+  const sudahIsiKrs = new Set(krsList.filter((k) => k.status !== 'DRAFT' || k.detailList.length).map((k) => k.mahasiswaId));
+  const belumIsiKrs = (m) => krsList.length > 0 && m.tahunMasuk <= tahunAjaran.tahunMulai && !sudahIsiKrs.has(m.id);
   const lulus = new Set(lulusList.map((y) => y.mahasiswaId));
   const akmBy = new Map(akmList.map((a) => [a.mahasiswaId, a.statusMahasiswa]));
   const perProdi = new Map();
@@ -90,6 +103,7 @@ const statistikProdi = async (tahunAjaran) => {
     else if (m.statusKeluar === 'MENGUNDURKAN_DIRI') r.mengundurkanDiri += 1;
     else if (m.statusKeluar === 'CUTI' || akm === 'C') r.cuti += 1;
     else if (m.statusKeluar || !m.isActive || akm === 'N') r.nonAktif += 1;
+    else if (!['A', 'G', 'M'].includes(akm) && belumIsiKrs(m)) r.nonAktif += 1;
     else r.aktif += 1;
   });
   const prodi = [...perProdi.values()].sort((a, b) => a.prodi.localeCompare(b.prodi));
