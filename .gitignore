@@ -3,3 +3,7 @@ node_modules/
 npm-debug.log
 *.log
 .DS_Store
+
+# Data pribadi karyawan & skrip impor data live: hanya disimpan lokal
+src/seeders/20260929090001-seed-karyawan-poltek-dan-akun.js
+scripts/
